@@ -1,25 +1,23 @@
-version: "3.9"
-
 services:
   proxy:
     image: httpd:2.4
     container_name: team2-apache
     ports:
-      - "80:80"         # add "443:443" if using https.conf later
+      - "80:80"
     volumes:
       - ./apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
       - ./apache/team2.conf:/usr/local/apache2/conf/extra/team2.conf:ro
-      # - ./apache/https.conf:/usr/local/apache2/conf/extra/https.conf:ro
-      # - ./apache/certs:/usr/local/apache2/conf/certs:ro
-    networks:
-      appnet:
-        aliases: ["team2-apache"]
     depends_on:
       - team2-app
       - team2-jupyter
+    networks:
+      appnet:
+        aliases: ["team2-apache"]
 
   team2-app:
-    build: ./team2-app
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: team2-app
     expose:
       - "2502"
