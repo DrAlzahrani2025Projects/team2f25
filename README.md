@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 Because the local repository can't been updated correctly, need to remove the directory first.
 
 ```bash
-rm -rf team1f25
+rm -rf team2f25
 ```
 
 ### Step 2: Clone the Repository
@@ -22,7 +22,7 @@ rm -rf team1f25
 Clone the GitHub repository to your local machine:
 
 ```
-git clone https://github.com/DrAlzahrani2025Projects/team1f25.git
+git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
 ### Step 3: Navigate to the Repository
@@ -30,7 +30,7 @@ git clone https://github.com/DrAlzahrani2025Projects/team1f25.git
 Change to the cloned repository directory:
 
 ```
-cd team1f25
+cd team2f25
 ```
 
 ### Step 4: Pull the Latest Version
@@ -59,7 +59,7 @@ chmod +x docker-setup.sh
 
 For Streamlit:
 
-- Once the container starts, Open browser at http://localhost:2501/team1f25
+- Once the container starts, Open browser at http://localhost:2502/team2f25
   
 
 ### Step 8: Run the script to stop and remove the Docker image and container :
@@ -74,7 +74,7 @@ For Streamlit:
 
 For Streamlit:
 
-Open browser at https://sec.cse.csysb.edu/team1f25 
+Open browser at https://sec.cse.csysb.edu/team2f25 
 
 ## Google Colab Notebook  
 
