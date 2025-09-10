@@ -5,7 +5,7 @@ COPY . /app
 
 RUN pip install --no-cache-dir flask
 
-ENV PORT=5000
-EXPOSE 5000
+ENV PORT=2502
+EXPOSE 2502
 
 CMD ["python", "app.py"]
