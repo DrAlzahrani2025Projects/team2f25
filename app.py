@@ -4,16 +4,15 @@ import os
 app = Flask(__name__)
 
 @app.route("/")
-@app.route("/team2/app/")
+@app.route("/team2f25")
+@app.route("/team2f25/")
 def hello():
     html = """
     <!doctype html>
     <html>
       <head><meta charset="utf-8"><title>Hello</title></head>
-      <body style="margin:0;display:flex;height:100vh;align-items:center;justify-content:center;background:#fafafa;">
-        <h1 style="font-size:64px;font-family:Segoe UI, Arial, sans-serif;margin:0;">
-          Hello Team2F25
-        </h1>
+      <body style="margin:0;display:flex;height:100vh;align-items:center;justify-content:center;font-family:Segoe UI,Arial,sans-serif">
+        <h1 style="font-size:64px;">Hello World</h1>
       </body>
     </html>
     """

@@ -1,11 +1,9 @@
-FROM python:3.8-slim-buster
-
+FROM python:3.11-slim
 WORKDIR /app
-COPY . /app
 
+# install Flask without requirements.txt
 RUN pip install --no-cache-dir flask
 
-ENV PORT=2502
+COPY . .
 EXPOSE 2502
-
 CMD ["python", "app.py"]

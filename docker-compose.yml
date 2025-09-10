@@ -3,7 +3,7 @@ services:
     image: httpd:2.4
     container_name: team2-apache
     ports:
-      - "80:80"
+      - "2502:80"        # was 8080:80 or 80:80
     volumes:
       - ./apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
       - ./apache/team2.conf:/usr/local/apache2/conf/extra/team2.conf:ro
@@ -30,7 +30,7 @@ services:
     container_name: team2-jupyter
     command:
       - start-notebook.sh
-      - --ServerApp.base_url=/team2/jupyter
+      - --ServerApp.base_url=/team2f25/jupyter
       - --ServerApp.trust_xheaders=True
       - --ServerApp.ip=0.0.0.0
       - --ServerApp.port=8888
