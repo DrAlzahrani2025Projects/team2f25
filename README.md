@@ -79,6 +79,8 @@ Open browser at https://sec.cse.csusb.edu/team2f25
 ## Google Colab Notebook  
 
 We have integrated a Google Colab notebook for easy access and execution.
+Here's the link to it:
+https://colab.research.google.com/drive/1icOiUzhhm0l7PkDoCxUdDMqpX1eua8ug?usp=sharing
 
 [Open in Colab]()
 
