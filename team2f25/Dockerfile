@@ -1,6 +1,8 @@
 FROM python:3.11-slim
 WORKDIR /app
 
+COPY streamlit_app.py .
+
 # Install Streamlit directly (add others if needed)
 RUN pip install --no-cache-dir streamlit
 

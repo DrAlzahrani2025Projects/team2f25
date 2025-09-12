@@ -18,7 +18,7 @@ services:
     expose: ["8888"]
     networks: [appnet]
 
-  proxy:
+  team2-apache:
     image: httpd:2.4
     container_name: team2-apache
     ports: ["2502:80"]
