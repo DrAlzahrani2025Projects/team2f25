@@ -12,7 +12,10 @@ EXPOSE 2502
 
 CMD streamlit run streamlit_app.py \
     --server.port=2502 \
+    --server.address=0.0.0.0 \
     --server.headless=true \
-    --server.baseUrlPath=/team2f25/ \
+    --server.baseUrlPath=/team2f25 \
+    --server.enableCORS=false \
+    --server.enableXsrfProtection=false \
     --browser.gatherUsageStats=false
 
