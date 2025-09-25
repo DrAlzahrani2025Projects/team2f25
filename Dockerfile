@@ -16,5 +16,5 @@ CMD streamlit run streamlit_app.py \
     --server.headless=true \
     --server.enableCORS=false \
     --server.enableXsrfProtection=false \
-    --browser.gatherUsageStats=false
-
+    --browser.gatherUsageStats=false \
+    --server.baseUrlPath=/team2f25
