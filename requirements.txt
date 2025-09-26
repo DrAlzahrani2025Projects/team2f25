@@ -1,0 +1,7 @@
+# Core web app
+streamlit==1.37.1
+
+# Jupyter ecosystem
+jupyter==1.0.0
+notebook==7.2.2
+jupyterlab==4.2.5
