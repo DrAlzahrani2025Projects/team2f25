@@ -25,7 +25,7 @@ services:
     image: jupyter/base-notebook:python-3.11    # pin like team1 for consistency
     command: >
       start-notebook.sh
-      --ServerApp.base_url=/team2f25/jupyter/
+      --ServerApp.base_url=/team2f25/jupyter
       --ServerApp.trust_xheaders=True
       --ServerApp.ip=0.0.0.0
       --ServerApp.port=8888
