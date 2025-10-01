@@ -59,7 +59,7 @@ chmod +x docker-setup.sh
 
 For Streamlit:
 
-- Once the container starts, Open browser at http://localhost:2502/team2f25
+- Once the container starts, Open browser at http://localhost:5002/team2f25
 
   
 
