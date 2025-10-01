@@ -11,6 +11,6 @@ COPY . /app
 RUN chown -R ${APPUSER}:${APPUSER} /app
 USER ${APPUSER}
 
-EXPOSE 2502
+EXPOSE 5002
 
-CMD ["streamlit", "run", "app.py","--server.port=2502","--server.address=0.0.0.0","--server.enableCORS=false","--server.baseUrlPath=/team2f25"]
+CMD ["streamlit", "run", "app.py","--server.port=5002","--server.address=0.0.0.0","--server.enableCORS=false","--server.baseUrlPath=/team2f25"]
