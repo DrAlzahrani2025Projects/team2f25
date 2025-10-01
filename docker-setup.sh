@@ -5,7 +5,7 @@ set -euo pipefail
 
 IMAGE="team2f25:latest"
 CONTAINER="team2f25"
-PORT="2502"
+PORT="5002"
 
 echo "🔧 Preparing to build image: ${IMAGE}"
 if [[ "${1:-}" == "--no-cache" ]]; then
