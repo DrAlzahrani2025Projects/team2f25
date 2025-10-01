@@ -61,9 +61,6 @@ For Streamlit:
 
 - Once the container starts, Open browser at http://localhost:2502/team2f25
 
-For Jupyter: 
-
-- http://localhost:2502/team2f25
   
 
 ### Step 8: Run the script to stop and remove the Docker image and container :
