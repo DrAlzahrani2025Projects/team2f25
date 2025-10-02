@@ -35,7 +35,8 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 echo
-echo "✅ App should be live at:  http://localhost:${PORT}/team2f25"
+echo "✅ App should be live locally at:  http://localhost:${PORT}/team2f25"
+echo "✅ App should be live at:  https://sec.cse.csusb.edu/team2f25"
 echo
 echo "👉 Logs (tail): docker logs -f ${CONTAINER}"
 echo "👉 Stop:        docker stop ${CONTAINER}"
