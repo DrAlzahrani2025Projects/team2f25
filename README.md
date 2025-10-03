@@ -41,23 +41,26 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
+### kill any old container with same name (optional)
+
+```
+docker rm -f team2f25 2>/dev/null || true
+```
+
+
+
 ### Step 5: Build the docker image:
 
 Run the setup script to build and start the Docker container:
 
 ```
-docker build -t team2f25-streamlit:latest .
+docker build --no-cache -t team2f25-streamlit:latest .
 ```
 
 ### Step 6: Run the container:
 
 ```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest \
-    streamlit run app.py \
-    --server.port=5002 \
-    --server.address=0.0.0.0 \
-    --server.enableCORS=false \
-    --server.baseUrlPath=/team2f25
+docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest streamlit run app.py --server.port=5002 --server.address=0.0.0.0 --server.enableCORS=false --server.baseUrlPath=/team2f25
 
 ```
 
@@ -82,12 +85,6 @@ For Streamlit:
 - Once the container starts, Open browser at http://localhost:5002/team2f25
 
   
-
-### Step 8: Run the script to stop and remove the Docker image and container :
-
-```
-./docker-cleanup.sh
-```
 
 ---
 
