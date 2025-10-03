@@ -41,13 +41,6 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
-### kill any old container with same name (optional)
-
-```
-docker rm -f team2f25 2>/dev/null || true
-```
-
-
 
 ### Step 5: Build the docker image:
 
