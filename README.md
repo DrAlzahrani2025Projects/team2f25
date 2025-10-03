@@ -54,7 +54,7 @@ docker rm -f team2f25 2>/dev/null || true
 Run the setup script to build and start the Docker container:
 
 ```
-docker build --no-cache -t team2f25-streamlit:latest .
+docker build -t team2f25-streamlit:latest .
 ```
 
 ### Step 6: Run the container:
