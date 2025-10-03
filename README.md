@@ -41,13 +41,6 @@ Update the repository to the latest version:
 git pull origin main
 ```
 
-### kill any old container with same name (optional)
-
-```
-docker rm -f team2f25 2>/dev/null || true
-```
-
-
 
 ### Step 5: Build the docker image:
 
@@ -60,12 +53,8 @@ docker build -t team2f25-streamlit:latest .
 ### Step 6: Run the container:
 
 ```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest \
-    streamlit run app.py \
-    --server.port=5002 \
-    --server.address=0.0.0.0 \
-    --server.enableCORS=false \
-    --server.baseUrlPath=/team2f25
+docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest streamlit run app.py --server.port 5002 --server.address 0.0.0.0 --server.enableCORS false --server.baseUrlPath team2f25
+
 
 ```
 
