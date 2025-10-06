@@ -18,7 +18,8 @@ fi
 
 # Start Streamlit right away
 exec streamlit run /app/app.py \
-  --server.port=5002 \
+  --server.port=${PORT:-5002} \
   --server.address=0.0.0.0 \
-  --server.enableCORS=false
+  --server.enableCORS=false \
+  "$@"
 

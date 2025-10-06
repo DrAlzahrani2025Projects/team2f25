@@ -28,4 +28,6 @@ ENV LLM_TIMEOUT=60
 ENV OLLAMA_KEEP_ALIVE=10m
 ENV OLLAMA_NUM_PARALLEL=2
 
-CMD ["/entrypoint.sh"]
+# ...
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []
