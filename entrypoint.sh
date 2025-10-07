@@ -7,10 +7,20 @@ UI_PORT="${UI_PORT:-5002}"
 echo "[entrypoint] starting Ollama..."
 ollama serve &
 
+
+# Build optional args for a sub-path
+BASE_FLAG=()
+if [[ -n "${BASE_PATH:-}" ]]; then
+  # expect e.g. BASE_PATH=team2f25  (no leading '/')
+  BASE_FLAG=(--server.baseUrlPath "$BASE_PATH")
+fi
+
 # Start Streamlit immediately so the page loads fast
-echo "[entrypoint] starting Streamlit on :${UI_PORT}"
-streamlit run /app/app.py --server.address=0.0.0.0 --server.port "${UI_PORT}" &
-ST_PID=$!
+streamlit run /app/app.py \
+  --server.address=0.0.0.0 \
+  --server.port "${UI_PORT}" \
+  "${BASE_FLAG[@]}" &
+ST_PID=$!   # <— capture PID so we can wait on it
 
 # In the background: wait for Ollama, then ensure model is present
 (
