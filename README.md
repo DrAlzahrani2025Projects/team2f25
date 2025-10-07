@@ -6,14 +6,11 @@ Python 3.10+
 
 pip (Python package installer)
 
-Docker Desktop or Docker CLI
-Install Docker
+Docker Desktop or Docker CLI: [Install Docker](https://www.docker.com) from its official website.
 
-Visual Studio Code (VS Code)
-Install VS Code
+Visual Studio Code (VS Code): [Install VS code](https://code.visualstudio.com/download) from its official website.
 
-Git for version control
-Install Git
+Git for version control: [Install Git](https://git-scm.com/) from its official website.
 
 Jupyter Notebook (for documentation and demos)
 Install Jupyter
