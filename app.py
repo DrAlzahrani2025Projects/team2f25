@@ -1,4 +1,6 @@
 import os
+import time
+import requests
 import streamlit as st
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, AIMessage
@@ -6,8 +8,39 @@ from langchain_core.messages import HumanMessage, AIMessage
 MODEL = os.getenv("MODEL_NAME", "qwen2:0.5b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
+# Streamlit page setup
 st.set_page_config(page_title="Basic Chat", page_icon="💬", layout="centered")
-st.title("💬 Basic Chat (qwen2:0.5b)")
+st.title(f"💬 Basic Chat ({MODEL})")
+
+# Helper functions to check Ollama and model readiness
+def ollama_ready() -> bool:
+    try:
+        return requests.get(f"{OLLAMA_HOST}/api/tags", timeout=1.5).ok
+    except Exception:
+        return False
+
+def model_ready(model: str = MODEL) -> bool:
+    try:
+        r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=1.5).json()
+        return any(m.get("name") == model for m in r.get("models", []))
+    except Exception:
+        return False
+# Auto-refresh until Ollama and the model are ready
+POLL_S = 2  # auto-refresh interval (seconds)
+
+# Auto-refresh until ready
+if not ollama_ready():
+    st.warning("🖥️ Ollama is starting… This page will refresh automatically.")
+    time.sleep(POLL_S)
+    st.rerun()
+
+if not model_ready():
+    st.warning(f"🚧 Model **{MODEL}** is loading… This page will refresh automatically.")
+    time.sleep(POLL_S)
+    st.rerun()
+
+st.success("✅ Ollama and model are ready!")
+
 
 # Keep it tiny: just a list of messages
 if "messages" not in st.session_state:
