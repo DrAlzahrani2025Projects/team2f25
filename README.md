@@ -1,12 +1,22 @@
 ## Prerequisites
 
-Before you begin, ensure you have the following:
+Before setting up the project, ensure you have the following installed:
 
-1. **Git**: [Install Git](https://git-scm.com/) from its official website.
-2. **Docker**: [Install Docker](https://www.docker.com) from its official website.
-3. **Linux/MacOS**: No extra setup needed.
-4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
+Python 3.10+
 
+pip (Python package installer)
+
+Docker Desktop or Docker CLI
+Install Docker
+
+Visual Studio Code (VS Code)
+Install VS Code
+
+Git for version control
+Install Git
+
+Jupyter Notebook (for documentation and demos)
+Install Jupyter
 ---
 
 ### Step 1: Remove the existing code directory completely
