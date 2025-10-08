@@ -29,14 +29,14 @@ async def healthz():
 
 async def ensure_model():
     """Ensure the selected model is present in Ollama; pull if missing."""
-    async with httpx.AsyncClient(timeout=60.0) as c:
-        r = await c.get(f"{OLLAMA_HOST}/api/tags")
-        r.raise_for_status()
+    async with httpx.AsyncClient(timeout=60.0) as c:     # ⏱️ Creates new client each request
+        r = await c.get(f"{OLLAMA_HOST}/api/tags")        # ⏱️ Extra network round-trip
+        r.raise_for_status() 
         tags = r.json().get("models", [])
         have = any(m.get("name", "").startswith(MODEL_NAME) for m in tags)
         if not have:
             # httpx accepts Timeout(None) instead of timeout=None in some versions
-            pr = await c.post(f"{OLLAMA_HOST}/api/pull", json={"name": MODEL_NAME}, timeout=httpx.Timeout(None))
+            pr = await c.post(f"{OLLAMA_HOST}/api/pull", json={"name": MODEL_NAME}, timeout=httpx.Timeout(None))  # ⏱️ If model missing, this pull can take seconds/minutes
             pr.raise_for_status()
 
 @app.post("/chat")
@@ -45,7 +45,7 @@ async def chat(body: dict = Body(...)):
     if not user_prompt:
         return JSONResponse({"error": "empty prompt"}, status_code=400)
 
-    await ensure_model()
+    await ensure_model()  # # ⏱️ Slow — runs on every request, even if model is already loaded
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
