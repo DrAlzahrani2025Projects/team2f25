@@ -16,6 +16,8 @@ RUN python -m pip install --upgrade pip && \
 
 # App code
 COPY app.py entrypoint.sh ./
+COPY styles.css .
+COPY .streamlit/ .streamlit/
 RUN chmod +x /app/entrypoint.sh
 
 # Defaults
