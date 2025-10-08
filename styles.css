@@ -1,25 +1,24 @@
-/* Dark + cute, super-round chat bubbles */
+/* Light + cute theme with round colorful chat bubbles */
 
-/* Friendly font */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
 :root{
-  /* Dark palette */
-  --bg:#0B1220;              /* page background */
-  --panel:#131a2a;           /* cards/sidebar/bubbles */
-  --text:#E6EAF2;            /* body text */
-  --muted:#9AA4B2;
+  /* Light pastel palette */
+  --bg:#EAF4FF;            /* page background (light blue) */
+  --panel:#FFFFFF;         /* boxes / sidebar */
+  --text:#102A43;          /* dark slate text */
+  --muted:#5B7083;
 
-  /* Playful accents */
-  --accent:#7AA2FF;          /* cornflower */
-  --accent-2:#FF7AB6;        /* pink */
-  --accent-3:#6FE3C1;        /* mint */
-  --accent-4:#FFC56E;        /* peach */
+  /* Bubble colors */
+  --user-bubble:#A8C5FF;    /* user bubble – soft blue */
+  --bot-bubble:#FFD6E0;     /* bot bubble – pink */
+  --input-bar:#F0F6FF;      /* input box */
+  --sidebar:#F6F9FE;        /* sidebar background */
 
-  --radius:9999px;           /* ultra-round bubbles */
+  --radius:9999px;          /* super-round corners */
   --font:"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-  --bubble-shadow:0 12px 28px rgba(0,0,0,.35);
+  --bubble-shadow:0 8px 20px rgba(16,42,67,.08);
 }
 
 .stApp{
@@ -28,45 +27,33 @@
   font-family:var(--font);
 }
 
-/* Layout spacing */
-[data-testid="stAppViewContainer"]>main{
-  padding-top:1rem;
-  padding-bottom:2rem;
-  max-width:1100px;
-  margin:0 auto;
-}
-
 /* Sidebar */
 section[data-testid="stSidebar"]>div{
-  background:var(--panel) !important;
+  background:var(--sidebar) !important;
   border-radius:24px !important;
   margin:12px;
   padding-top:8px;
   box-shadow:var(--bubble-shadow);
-  border:1px solid rgba(255,255,255,.05);
+  border:1px solid rgba(0,0,0,.05);
 }
-
-/* Headings */
-h1, .stMarkdown h1{ letter-spacing:-.02em; font-weight:700; }
-h2, .stMarkdown h2{ font-weight:600; }
 
 /* Inputs */
 .stTextInput, .stSelectbox, .stMultiSelect, .stTextArea{
   border-radius:18px !important;
-  background:var(--panel) !important;
+  background:var(--input-bar) !important;
   color:var(--text) !important;
-  border:1px solid rgba(255,255,255,.06);
+  border:1px solid rgba(0,0,0,.06);
 }
 
-/* Buttons → pill + glow */
+/* Buttons */
 .stButton>button{
   border-radius:9999px !important;
   border:0;
   padding:.6rem 1.1rem;
   font-weight:600;
-  color:#0b1220;
-  background:linear-gradient(90deg, var(--accent-3), var(--accent-4));
-  box-shadow:0 10px 22px rgba(255,197,110,.22);
+  color:white;
+  background:linear-gradient(90deg, #5B8DEF, #A0B8FF);
+  box-shadow:0 6px 14px rgba(91,141,239,.25);
   transition:transform .06s ease, box-shadow .2s ease, opacity .2s ease;
 }
 .stButton>button:hover{ transform:translateY(-1px); }
@@ -74,43 +61,43 @@ h2, .stMarkdown h2{ font-weight:600; }
 
 /* Chat input bar */
 [data-testid="stChatInput"]>div{
-  background:var(--panel) !important;
-  border:1px solid rgba(255,255,255,.06);
+  background:var(--input-bar) !important;
+  border:1px solid rgba(0,0,0,.06);
   border-radius:24px !important;
   box-shadow:var(--bubble-shadow);
 }
 
-/* Message bubbles: round + soft gradients */
+/* Chat message bubbles */
 [data-testid="stChatMessage"]{
   border-radius:var(--radius) !important;
-  padding:.95rem 1.15rem;
-  background:var(--panel) !important;
-  border:1px solid rgba(255,255,255,.06);
+  padding:.9rem 1.1rem;
+  border:1px solid rgba(0,0,0,.05);
   box-shadow:var(--bubble-shadow);
   margin:.6rem 0;
+  color:var(--text);
 }
-[data-testid="stChatMessage"]:nth-of-type(odd){
-  background:linear-gradient(135deg, rgba(122,162,255,.18), rgba(255,122,182,.14)) !important;
-}
+
+/* User bubble */
 [data-testid="stChatMessage"]:nth-of-type(even){
-  background:linear-gradient(135deg, rgba(111,227,193,.18), rgba(19,26,42,.6)) !important;
+  background:var(--user-bubble) !important;
+}
+
+/* Bot bubble */
+[data-testid="stChatMessage"]:nth-of-type(odd){
+  background:var(--bot-bubble) !important;
 }
 
 /* Text inside bubbles */
 [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p{ margin:0; }
-[data-testid="stChatMessage"] code{
-  background:rgba(255,255,255,.08);
-  padding:.15rem .35rem; border-radius:8px;
-}
 
 /* Links */
-a{ color:var(--accent) !important; text-decoration:none; }
+a{ color:#5B8DEF !important; text-decoration:none; }
 a:hover{ text-decoration:underline; }
 
-/* Tables/cards */
+/* Tables / cards */
 .stDataFrame, .stAlert, .stMetric, .stContainer{
   border-radius:18px !important;
   box-shadow:var(--bubble-shadow);
   background:var(--panel) !important;
-  border:1px solid rgba(255,255,255,.05);
+  border:1px solid rgba(0,0,0,.05);
 }
