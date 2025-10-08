@@ -1,117 +1,116 @@
-/* Cute + colorful theme for Streamlit chat */
+/* Dark + cute, super-round chat bubbles */
 
-/* Google font with soft, friendly curves */
+/* Friendly font */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
 :root{
-  /* Pastel palette */
-  --bg: #EAF4FF;            /* light blue page background */
-  --panel: #FFFFFF;         /* cards/sidebar */
-  --text: #102A43;          /* dark slate text */
-  --muted: #5B7083;
+  /* Dark palette */
+  --bg:#0B1220;              /* page background */
+  --panel:#131a2a;           /* cards/sidebar/bubbles */
+  --text:#E6EAF2;            /* body text */
+  --muted:#9AA4B2;
 
-  --accent: #5B8DEF;        /* primary (cornflower) */
-  --accent-2: #FF7AB6;      /* pink */
-  --accent-3: #7AD8C1;      /* mint */
-  --accent-4: #FFC76B;      /* peach */
+  /* Playful accents */
+  --accent:#7AA2FF;          /* cornflower */
+  --accent-2:#FF7AB6;        /* pink */
+  --accent-3:#6FE3C1;        /* mint */
+  --accent-4:#FFC56E;        /* peach */
 
-  --radius: 9999px;         /* super-round “bubble” corners */
-  --font: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius:9999px;           /* ultra-round bubbles */
+  --font:"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-  --bubble-shadow: 0 10px 24px rgba(16,42,67,.08);
+  --bubble-shadow:0 12px 28px rgba(0,0,0,.35);
 }
 
-/* App background + global text/font */
-.stApp {
-  background: var(--bg) !important;
-  color: var(--text) !important;
-  font-family: var(--font);
+.stApp{
+  background:var(--bg) !important;
+  color:var(--text) !important;
+  font-family:var(--font);
 }
 
-/* Page width + spacing */
-[data-testid="stAppViewContainer"]>main {
-  padding-top: 1rem;
-  padding-bottom: 2rem;
-  max-width: 1100px;
-  margin: 0 auto;
+/* Layout spacing */
+[data-testid="stAppViewContainer"]>main{
+  padding-top:1rem;
+  padding-bottom:2rem;
+  max-width:1100px;
+  margin:0 auto;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"]>div{
+  background:var(--panel) !important;
+  border-radius:24px !important;
+  margin:12px;
+  padding-top:8px;
+  box-shadow:var(--bubble-shadow);
+  border:1px solid rgba(255,255,255,.05);
 }
 
 /* Headings */
-h1, .stMarkdown h1 { letter-spacing:-.02em; font-weight:700; }
-h2, .stMarkdown h2 { font-weight:600; }
-
-/* Sidebar as soft card */
-section[data-testid="stSidebar"]>div {
-  background: var(--panel) !important;
-  border-radius: 24px !important;
-  margin: 12px;
-  padding-top: 8px;
-  box-shadow: var(--bubble-shadow);
-}
+h1, .stMarkdown h1{ letter-spacing:-.02em; font-weight:700; }
+h2, .stMarkdown h2{ font-weight:600; }
 
 /* Inputs */
-.stTextInput, .stSelectbox, .stMultiSelect, .stTextArea {
-  border-radius: 18px !important;
+.stTextInput, .stSelectbox, .stMultiSelect, .stTextArea{
+  border-radius:18px !important;
+  background:var(--panel) !important;
+  color:var(--text) !important;
+  border:1px solid rgba(255,255,255,.06);
 }
 
-/* Buttons → pill & colorful */
+/* Buttons → pill + glow */
 .stButton>button{
-  border-radius: 9999px !important;
-  border: 0;
-  padding: .6rem 1.1rem;
-  font-weight: 600;
-  box-shadow: 0 8px 18px rgba(91,141,239,.28);
-  background: linear-gradient(90deg, var(--accent), #7aa7ff);
-  color: white;
-  transition: transform .06s ease, box-shadow .2s ease, opacity .2s ease;
+  border-radius:9999px !important;
+  border:0;
+  padding:.6rem 1.1rem;
+  font-weight:600;
+  color:#0b1220;
+  background:linear-gradient(90deg, var(--accent-3), var(--accent-4));
+  box-shadow:0 10px 22px rgba(255,197,110,.22);
+  transition:transform .06s ease, box-shadow .2s ease, opacity .2s ease;
 }
-.stButton>button:hover{ transform: translateY(-1px); }
-.stButton>button:active{ transform: translateY(0); opacity: .95; }
+.stButton>button:hover{ transform:translateY(-1px); }
+.stButton>button:active{ transform:translateY(0); opacity:.95; }
 
-/* Chat input bar at the bottom */
+/* Chat input bar */
 [data-testid="stChatInput"]>div{
-  background: var(--panel) !important;
-  border-radius: 24px !important;
-  border: 1px solid rgba(0,0,0,.06);
-  box-shadow: var(--bubble-shadow);
+  background:var(--panel) !important;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:24px !important;
+  box-shadow:var(--bubble-shadow);
 }
 
-/* Chat message bubbles (super round + cute) */
+/* Message bubbles: round + soft gradients */
 [data-testid="stChatMessage"]{
-  border-radius: var(--radius) !important;     /* <-- round bubbles */
-  padding: 0.9rem 1.1rem;
-  background: var(--panel) !important;
-  border: 1px solid rgba(0,0,0,.05);
-  box-shadow: var(--bubble-shadow);
-  margin: .6rem 0;
+  border-radius:var(--radius) !important;
+  padding:.95rem 1.15rem;
+  background:var(--panel) !important;
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:var(--bubble-shadow);
+  margin:.6rem 0;
 }
-
-/* Make alternating bubbles colorful */
 [data-testid="stChatMessage"]:nth-of-type(odd){
-  background: linear-gradient(135deg, rgba(123,216,193,.25), rgba(255,199,107,.25)) !important;
-  border-color: rgba(123,216,193,.35);
+  background:linear-gradient(135deg, rgba(122,162,255,.18), rgba(255,122,182,.14)) !important;
 }
 [data-testid="stChatMessage"]:nth-of-type(even){
-  background: linear-gradient(135deg, rgba(91,141,239,.22), rgba(255,122,182,.22)) !important;
-  border-color: rgba(91,141,239,.35);
+  background:linear-gradient(135deg, rgba(111,227,193,.18), rgba(19,26,42,.6)) !important;
 }
 
-/* Bubble text tweaks */
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p { margin: 0; }
-[data-testid="stChatMessage"] code { background: rgba(16,42,67,.06); padding: .15rem .35rem; border-radius: 8px; }
+/* Text inside bubbles */
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p{ margin:0; }
+[data-testid="stChatMessage"] code{
+  background:rgba(255,255,255,.08);
+  padding:.15rem .35rem; border-radius:8px;
+}
 
 /* Links */
-a { color: var(--accent) !important; text-decoration: none; }
-a:hover { text-decoration: underline; }
+a{ color:var(--accent) !important; text-decoration:none; }
+a:hover{ text-decoration:underline; }
 
-/* Dataframes and generic cards */
+/* Tables/cards */
 .stDataFrame, .stAlert, .stMetric, .stContainer{
-  border-radius: 18px !important;
-  box-shadow: var(--bubble-shadow);
-}
-
-/* Optional: cute badges for labels */
-.badge {
-  display:inline-block; padding:.25rem .6rem; border-radius:9999px;
-  background: rgba(91,141,239,.15); color: var(--accent); font-weight:600; font-size:.85rem;
+  border-radius:18px !important;
+  box-shadow:var(--bubble-shadow);
+  background:var(--panel) !important;
+  border:1px solid rgba(255,255,255,.05);
 }
