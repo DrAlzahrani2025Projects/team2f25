@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 
+ENV BASE_PATH=team2f25
 # System deps + Ollama
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && \
