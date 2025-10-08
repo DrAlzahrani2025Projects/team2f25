@@ -16,7 +16,7 @@ try:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
     pass
-st.title(f"💬 Chat with Qwen ({MODEL})")
+st.title(f"💬 Ask a question ({MODEL})")
 
 # Helper functions to check Ollama and model readiness
 def ollama_ready() -> bool:
