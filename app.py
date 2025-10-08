@@ -9,8 +9,14 @@ MODEL = os.getenv("MODEL_NAME", "qwen2:0.5b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
 # Streamlit page setup
-st.set_page_config(page_title="Basic Chat", page_icon="💬", layout="centered")
-st.title(f"💬 Basic Chat ({MODEL})")
+st.set_page_config(page_title="Chat with Qwen", page_icon="💬", layout="centered")
+css_path = "styles.css"
+try:
+    with open(css_path) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError:
+    pass
+st.title(f"💬 Chat with Qwen ({MODEL})")
 
 # Helper functions to check Ollama and model readiness
 def ollama_ready() -> bool:
