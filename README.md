@@ -49,34 +49,21 @@ git pull origin main
 ```
 
 
-### Step 5: Build the docker image:
+### Step 5: Make the startup file executable:
 
 Run the setup script to build and start the Docker container:
 
 ```
-docker build -t team2f25-streamlit:latest .
+chmod +x startup.sh
 ```
 
-### Step 6: Run the container:
+### Step 6: Run the startup file:
+
+This will automatically build, start and run the container
 
 ```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest streamlit run app.py --server.port=5002 --server.address=0.0.0.0 --server.enableCORS=false --server.baseUrlPath=/team2f25
-
+./startup.sh
 ```
-
-If you're using git bash run the below command
-```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest
-```
-
-### Optional Step : Error: port is already allocated
-If you're encountering error: port is already allocated
-```
-docker stop $(docker ps -q --filter "publish=5002")
-docker ps -a -q | xargs -r docker rm
-
-```
-
 
 ### Step 7: Access the Chatbot
 
