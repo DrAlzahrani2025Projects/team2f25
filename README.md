@@ -1,16 +1,12 @@
 ## Prerequisites
 
-Before setting up the project, ensure you have the following installed:
+Before you begin, ensure you have the following:
 
-Python 3.10+
+1. **Git**: [Install Git](https://git-scm.com/) from its official website.
+2. **Docker**: [Install Docker](https://www.docker.com) from its official website.
+3. **Linux/MacOS**: No extra setup needed.
+4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
 
-pip (Python package installer)
-
-Docker Desktop or Docker CLI: [Install Docker](https://www.docker.com) from its official website.
-
-Visual Studio Code (VS Code): [Install VS code](https://code.visualstudio.com/download) from its official website.
-
-Git for version control: [Install Git](https://git-scm.com/) from its official website.
 
 Jupyter Notebook (for documentation and demos)
 Install Jupyter
@@ -72,6 +68,15 @@ For Streamlit:
 - Once the container starts, Open browser at http://localhost:5002/team2f25
 
   
+
+---
+### Step 9: Clean Up
+
+When you are finished, run the cleanup script to stop and remove the Docker container and image.
+
+```bash
+./cleanup.sh
+```
 
 ---
 
