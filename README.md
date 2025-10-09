@@ -1,20 +1,17 @@
 ## Prerequisites
 
-Before setting up the project, ensure you have the following installed:
+Before you begin, ensure you have the following:
 
-Python 3.10+
+1. **Git**: [Install Git](https://git-scm.com/) from its official website.
+2. **Docker**: [Install Docker](https://www.docker.com) from its official website.
+3. **Linux/MacOS**: No extra setup needed.
+4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
 
-pip (Python package installer)
-
-Docker Desktop or Docker CLI: [Install Docker](https://www.docker.com) from its official website.
-
-Visual Studio Code (VS Code): [Install VS code](https://code.visualstudio.com/download) from its official website.
-
-Git for version control: [Install Git](https://git-scm.com/) from its official website.
-
-Jupyter Notebook (for documentation and demos)
-Install Jupyter
 ---
+
+## Running the Application
+
+Follow these steps to get the application running on your local machine.
 
 ### Step 1: Remove the existing code directory completely
 
@@ -28,7 +25,7 @@ rm -rf team2f25
 
 Clone the GitHub repository to your local machine:
 
-```
+```bash
 git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
@@ -36,7 +33,7 @@ git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 
 Change to the cloned repository directory:
 
-```
+```bash
 cd team2f25
 ```
 
@@ -44,47 +41,45 @@ cd team2f25
 
 Update the repository to the latest version:
 
-```
+```bash
 git pull origin main
 ```
 
+### Step 5: Make Scripts Executable
 
-### Step 5: Build the docker image:
+Make the setup and cleanup scripts executable. This step only needs to be done once.
 
-Run the setup script to build and start the Docker container:
+*Note: If you are on Windows, you must run this command in a `bash` terminal, such as the one provided by Git Bash or WSL.*
 
-```
-docker build -t team2f25-streamlit:latest .
-```
-
-### Step 6: Run the container:
-
-```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest streamlit run app.py --server.port=5002 --server.address=0.0.0.0 --server.enableCORS=false --server.baseUrlPath=/team2f25
-
+```bash
+chmod +x startup.sh cleanup.sh
 ```
 
-If you're using git bash run the below command
-```
-docker run -d -p 5002:5002 --name team2f25 team2f25-streamlit:latest
-```
+### Step 6: Run the Startup Script
 
-### Optional Step : Error: port is already allocated
-If you're encountering error: port is already allocated
-```
-docker stop $(docker ps -q --filter "publish=5002")
-docker ps -a -q | xargs -r docker rm
+Execute the startup script to begin the setup process.
 
+```bash
+./startup.sh
 ```
 
+### Step 7: Enter Your API Key
 
-### Step 7: Access the Chatbot
+When prompted by the script, paste your Groq API key from Team1 Canvas discussion board and press Enter.
 
-For Streamlit:
+### Step 8: Access the AI Agent
 
-- Once the container starts, Open browser at http://localhost:5002/team2f25
+Once the container starts, open your browser and navigate to:
 
-  
+[http://localhost:5002/team2f25](http://localhost:5002/team2f25/)
+
+### Step 9: Clean Up
+
+When you are finished, run the cleanup script to stop and remove the Docker container and image.
+
+```bash
+./cleanup.sh
+```
 
 ---
 
@@ -92,7 +87,7 @@ For Streamlit:
 
 For Streamlit:
 
-Open browser at https://sec.cse.csusb.edu/team2f25 
+Open browser at https://sec.cse.csusb.edu/team2f25/
 
 ## Google Colab Notebook  
 [Open in Colab](https://colab.research.google.com/drive/1icOiUzhhm0l7PkDoCxUdDMqpX1eua8ug?usp=sharing)
