@@ -63,10 +63,6 @@ Execute the startup script to begin the setup process.
 ./startup.sh
 ```
 
-### Step 7: Enter Your API Key
-
-When prompted by the script, paste your Groq API key from Team1 Canvas discussion board and press Enter.
-
 ### Step 8: Access the AI Agent
 
 Once the container starts, open your browser and navigate to:
