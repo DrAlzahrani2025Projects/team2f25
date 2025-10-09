@@ -50,7 +50,8 @@ git pull origin main
 Run the setup script to build and start the Docker container:
 
 ```
-chmod +x startup.sh
+sed -i 's/\r$//' startup.sh cleanup.sh entrypoint.sh
+chmod +x startup.sh cleanup.sh entrypoint.sh
 ```
 
 ### Step 6: Run the startup file:
