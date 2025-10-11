@@ -1,0 +1,11 @@
+streamlit
+pandas
+playwright
+beautifulsoup4
+langchain
+langchain-openai
+openai
+python-dotenv
+pyarrow
+tqdm
+lxml
