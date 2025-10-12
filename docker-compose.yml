@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  proxy:
+    image: httpd:2.4
+    ports:
+      - "2502:80"                               # http://localhost:2502
+    depends_on:
+      - team2-app
+      - team2-jupyter
+    volumes:
+      - ./apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
+      - ./apache/team2.conf:/usr/local/apache2/conf/extra/team2.conf:ro
+    networks:
+      appnet: {}
+
+  team2-app:
+    build: .
+    expose: ["2502"]                            # internal port your app listens on
+    networks:
+      appnet:
+        aliases: ["team2-app"]                  # optional; service name already works
+
+  team2-jupyter:
+    image: jupyter/base-notebook:python-3.11    # pin like team1 for consistency
+    command: >
+      start-notebook.sh
+      --ServerApp.base_url=/team2f25/jupyter
+      --ServerApp.trust_xheaders=True
+      --ServerApp.ip=0.0.0.0
+      --ServerApp.port=8888
+      --ServerApp.token=''
+      --ServerApp.password=''
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    expose: ["8888"]
+    networks:
+      appnet:
+        aliases: ["team2-jupyter"]           
+
+networks:
+  appnet:
+    driver: bridge
