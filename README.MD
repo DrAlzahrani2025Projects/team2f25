@@ -21,7 +21,7 @@ docker run --rm -p 5002:5002 \
 
 
 Then open in your browser:
-👉 http://localhost:5002
+👉 http://localhost:5002/team2f25
 
 or (if deployed on CSUSB server):
 👉 https://sec.cse.csusb.edu/team2f25

@@ -18,5 +18,3 @@ docker run --rm -p ${HOST_PORT}:5002 \
   -v "${DATA_DIR}:/app/data" \
   --name "${NAME}" \
   "${IMAGE}"
-
-# Note: open http://localhost:${HOST_PORT}/team2f25 (or override base path via env)

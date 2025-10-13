@@ -1,10 +1,10 @@
 """
 Internship Finder Agent – Team2f25 (port 5002)
-Clean Streamlit UI:
-- Run Scraper (Playwright)
-- Toggle demo/sample vs. real data
+Streamlit UI:
+- Fetch ALL internships from CSUSB (Playwright)
+- Toggle demo/sample vs. live data
 - Natural language search -> structured filters (LangChain optional)
-- Results table + CSV export
+- Results table with clickable links + CSV export
 """
 
 import os
@@ -36,23 +36,33 @@ st.caption(f"Base URL path: `/team2f25` • Source: {CSUSB_CSE_URL}")
 with st.sidebar:
     st.header("Actions")
 
-    if st.button("🔄 Fetch ALL internships from CSUSB"):
+    fetch_label = "🔄 Fetch ALL internships from CSUSB (refresh)"
+    fetch_help = (
+        "Visits the CSUSB CSE Internships & Careers page and extracts every "
+        "internship opening found. Replaces the current dataset."
+    )
+
+    if st.button(fetch_label, help=fetch_help):
         try:
             with st.spinner("Fetching all internships from CSUSB…"):
                 df_live = scrape_csusb_listings()
                 os.makedirs(DATA_DIR, exist_ok=True)
-                df_live.to_parquet(PARQUET_PATH, index=False)
-                st.session_state["df"] = df_live
-                st.success(f"Scraped {len(df_live)} rows and saved to data/internships.parquet")
+                if df_live.empty:
+                    st.warning("No internships were found on the page right now. Try again later.")
+                else:
+                    df_live.to_parquet(PARQUET_PATH, index=False)
+                    st.session_state["df"] = df_live
+                    st.success(f"Loaded ALL internships from CSUSB — {len(df_live)} found. "
+                               f"Saved to data/internships.parquet.")
         except Exception as e:
-            st.error(f"Scraper error: {e}")
+            st.error(f"Fetch failed: {e}")
 
     if st.button("📂 Load saved parquet (if any)"):
         if os.path.exists(PARQUET_PATH):
             st.session_state["df"] = pd.read_parquet(PARQUET_PATH)
             st.success(f"Loaded {len(st.session_state['df'])} rows from parquet")
         else:
-            st.warning("No saved parquet yet. Run the scraper first.")
+            st.warning("No saved parquet yet. Use the fetch button above first.")
 
 # --------------------- Data Source Choice ----------------
 st.subheader("Search internships")
@@ -68,7 +78,6 @@ if use_sample and os.path.exists(SAMPLE_CSV_PATH):
     df = pd.read_csv(SAMPLE_CSV_PATH)
     st.warning("Demo mode is ON — showing sample data instead of live scraped results.")
 else:
-    # Prefer session df (fresh from scraper), then parquet, else empty
     df = st.session_state.get("df")
     if df is None:
         if os.path.exists(PARQUET_PATH):
@@ -141,15 +150,19 @@ if filters and not filtered.empty:
 st.subheader("Results")
 st.write(f"Showing **{len(filtered)}** of **{len(df)}** rows")
 
-st.dataframe(
-    filtered,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "link": st.column_config.LinkColumn("link", help="Open posting"),
-    },
-)
-
+# clickable hyperlinks for `link` column
+try:
+    st.dataframe(
+        filtered,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "link": st.column_config.LinkColumn("link", help="Open posting"),
+        },
+    )
+except Exception:
+    # Fallback for older Streamlit versions
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
 
 csv_bytes = filtered.to_csv(index=False).encode("utf-8")
 st.download_button(

@@ -7,7 +7,7 @@ NAME="team2f25"
 echo "Stopping & removing container (if running)…"
 docker rm -f "${NAME}" >/dev/null 2>&1 || true
 
-echo "Remove dangling containers using port 5002 (if any)…"
+echo "Remove any containers using port 5002…"
 for id in $(docker ps -q --filter "publish=5002"); do docker rm -f "$id"; done
 
 read -p "Also remove image ${IMAGE}? [y/N] " yn
