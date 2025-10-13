@@ -22,8 +22,8 @@ COPY app.py /app/app.py
 COPY scraper.py /app/scraper.py
 COPY query_to_filter.py /app/query_to_filter.py
 COPY data /app/data
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+ COPY entrypoint.sh /app/entrypoint.sh
+ RUN chmod +x /app/entrypoint.sh
 
 # Default env (can be overridden at runtime)
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
