@@ -1,4 +1,9 @@
-streamlit==1.37.0
-langchain==0.2.10
-langchain-ollama==0.1.1
-httpx==0.27.0
+streamlit
+pandas
+pyarrow
+beautifulsoup4
+lxml
+tldextract
+playwright
+langchain
+langchain-ollama
