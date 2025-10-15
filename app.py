@@ -8,7 +8,7 @@ import streamlit as st
 from scraper import (
     scrape_csusb_listings,
     CSUSB_CSE_URL,
-    quick_company_links_playwright,  # Playwright company-only fallback on CSUSB page
+    quick_company_links_playwright,
 )
 from query_to_filter import parse_query_to_filter, classify_intent
 
@@ -20,10 +20,11 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💬", layout="wide")
 st.title(APP_TITLE)
 st.caption(
     f"Source: {CSUSB_CSE_URL} • Ask anything. For internships, try: "
-    "“nasa internships”, “google internships”, “only java developer internships”, “python qa remote”, or “show all internships”."
+    "“nasa internships”, “google internships”, “only java developer internships”, "
+    "“python qa remote”, or “show all internships”."
 )
 
-# --------------- Rate limit (10/min) ---------------
+# ---------------- Rate limit (10/min) ----------------
 if "q_times" not in st.session_state:
     st.session_state.q_times = deque()
 
@@ -37,7 +38,7 @@ def check_rate_limit() -> bool:
     st.session_state.q_times.append(now)
     return True
 
-# --------------- Cache ---------------
+# ---------------- Cache ----------------
 @st.cache_data(show_spinner=False)
 def load_cached_df() -> pd.DataFrame:
     if PARQUET_PATH.exists():
@@ -53,13 +54,13 @@ def _cache_age_hours() -> float:
     return (time.time() - PARQUET_PATH.stat().st_mtime) / 3600.0
 
 @st.cache_data(show_spinner=True)
-def fetch_all_internships(deep: bool = False) -> pd.DataFrame:
+def fetch_all_internships() -> pd.DataFrame:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df = scrape_csusb_listings(deep=deep, max_pages=int(os.getenv("MAX_PAGES", "80")))
+    df = scrape_csusb_listings(deep=False, max_pages=int(os.getenv("MAX_PAGES", "80")))
     df.to_parquet(PARQUET_PATH, index=False)
     return df
 
-# --------------- LLM helpers ---------------
+# ---------------- LLM helpers (small talk) ----------------
 def _llm_reply(system: str, user: str) -> str:
     try:
         from langchain_ollama import ChatOllama
@@ -81,8 +82,9 @@ def _llm_reply(system: str, user: str) -> str:
 
 def _general_chat_reply(user_text: str) -> str:
     sys = ("You are the CSUSB Internship Finder Agent. "
-           "If the user is NOT asking for internships, answer helpfully in 1–3 sentences.")
-    return _llm_reply(sys, user_text) or "I’m the CSUSB Internship Finder Agent."
+           "If the user is NOT asking for internships, answer helpfully in 1–3 sentences. "
+           "Stay friendly and concise.")
+    return _llm_reply(sys, user_text) or "Hello! How can I help?"
 
 def _describe_filters(f: dict) -> str:
     parts = []
@@ -102,11 +104,8 @@ def _search_summary(user_text: str, count: int, df: pd.DataFrame, filters: dict)
     if count == 0:
         what = f" for **{desc}**" if desc else ""
         return f"Sorry, I couldn’t find any internships on the CSUSB page{what}."
-    examples = "; ".join(df["title"].head(4).fillna("").tolist())
     suffix = f" for **{desc}**" if desc else ""
-    sys = "Summarize matches in 1–2 sentences. Don’t list items; I will render links separately."
-    return _llm_reply(sys, f"Query: {user_text}\nFilters: {desc}\nMatches: {count}\nExamples: {examples}") \
-           or f"Here are **{count}** internships from the CSUSB page{suffix}."
+    return f"Here are **{count}** internships from the CSUSB page{suffix}."
 
 def _links_md(df: pd.DataFrame) -> str:
     if df.empty:
@@ -120,7 +119,7 @@ def _links_md(df: pd.DataFrame) -> str:
         lines.append(f"{i}. [{label}]({link}) — **Apply**")
     return "**Apply links:**\n\n" + "\n".join(lines)
 
-# --------------- Chat history ---------------
+# ---------------- Chat history ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
@@ -128,11 +127,12 @@ if "messages" not in st.session_state:
                    "For internships, tell me the role, skills, or location you want."
     }]
 
+# Render prior history ONCE (prevents duplicate/“extra” top messages)
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --------------- Input ---------------
+# ---------------- Input ----------------
 user_msg = st.chat_input("Type your question…")
 if not user_msg:
     st.stop()
@@ -143,11 +143,17 @@ st.session_state.messages.append({"role": "user", "content": user_msg})
 with st.chat_message("user"):
     st.markdown(user_msg)
 
-# --------------- Parse / intent ---------------
+# ---------------- Intent / filters ----------------
 filters = parse_query_to_filter(user_msg)
 intent = classify_intent(user_msg)
 
-force_search = bool(filters.get("company_name") or filters.get("title_keywords") or filters.get("skills"))
+force_search = bool(
+    filters.get("company_name")
+    or filters.get("title_keywords")
+    or filters.get("skills")
+    or filters.get("show_all")
+)
+
 if intent == "general_question" and not force_search:
     reply = _general_chat_reply(user_msg)
     with st.chat_message("assistant"):
@@ -155,18 +161,18 @@ if intent == "general_question" and not force_search:
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
 
-# --------------- Fetch data ---------------
+# ---------------- Data ----------------
 ask_all = bool(filters.get("show_all"))
 need_refresh = _cache_age_hours() > 6 or any(w in user_msg.lower() for w in ["refresh", "reload", "latest", "new"])
 
 df = load_cached_df()
 if df.empty or need_refresh or ("details" not in df.columns):
     with st.spinner("Fetching internships from the CSUSB CSE Internships & Careers page…"):
-        df = fetch_all_internships(deep=False)
+        df = fetch_all_internships()
 
 table = df.copy()
 
-# --------------- Matching mode ---------------
+# ---------------- Matching mode ----------------
 role_mode_env = os.getenv("ROLE_MATCH_MODE", "").strip().lower()
 role_mode = filters.get("role_match", "broad")
 if role_mode_env in ("strict", "broad"):
@@ -206,9 +212,9 @@ def _any_match(df_: pd.DataFrame, cols: List[str], pattern: str, strict: bool = 
         mask = m if mask is None else (mask | m)
     return mask if mask is not None else pd.Series([False] * len(df_))
 
-# --------------- Apply filters (CSUSB-only) ---------------
+# ---------------- Apply filters (CSUSB-only) ----------------
 if not ask_all:
-    # 1) COMPANY FIRST (host/title/details/company)
+    # 1) Company first
     comp = (filters.get("company_name") or "").strip().lower()
     if comp:
         def _match_company(df_: pd.DataFrame, token: str):
@@ -224,27 +230,26 @@ if not ask_all:
             )
         table = table[_match_company(table, comp)]
 
-        # Playwright fallback that returns ONLY that company's anchors from the CSUSB page
         if len(table) == 0:
             fb = quick_company_links_playwright(comp)
             if len(fb) > 0:
                 table = fb
 
-    # 2) ROLE / KEYWORDS (apply AFTER company so we don't erase company rows)
+    # 2) Role / title keywords
     title_keywords = [t for t in (filters.get("title_keywords") or []) if str(t).strip()]
     if title_keywords:
         pat = _role_pattern(title_keywords, STRICT)
         if pat:
             table = table[_any_match(table, ["title", "details"], pat, strict=STRICT)]
 
-    # 3) SKILLS / TECH STACK (java, python, react, aws, selenium, etc.)
+    # 3) Skills / tech stack
     for s in (filters.get("skills") or []):
         s = str(s).strip()
         if not s:
             continue
         table = table[_any_match(table, ["title", "details"], re.escape(s), strict=False)]
 
-    # 4) REMOTE
+    # 4) Remote
     rtype = (filters.get("remote_type") or "").strip().lower()
     if rtype:
         if "remote" in table.columns:
@@ -252,13 +257,13 @@ if not ask_all:
         else:
             table = table[_any_match(table, ["details"], rtype)]
 
-    # 5) LOCATION
+    # 5) Location
     for key in ("city", "state", "country", "zipcode"):
         val = (filters.get(key) or "").strip()
         if val:
             table = table[_any_match(table, ["title", "location", "details"], re.escape(val))]
 
-    # 6) EDUCATION / EXPERIENCE / SALARY (best-effort text search)
+    # 6) Education / experience / salary
     if filters.get("education_level"):
         table = table[_any_match(table, ["details"], re.escape(str(filters["education_level"])))]
     if filters.get("experience_level"):
@@ -271,37 +276,25 @@ if not ask_all:
         except Exception:
             pass
 
-# --------------- Render ---------------
+# ---------------- Render ----------------
 cols = ["title","company","location","posted_date","salary","education","remote","host","link","source","details"]
 for c in cols:
     if c not in table.columns:
         table[c] = None
 
 summary = _search_summary(user_msg, len(table), table, filters)
+links_md = _links_md(table)
+assistant_md = summary + "\n\n" + links_md
 
+# Render the current reply and store it once (prevents “extra message at top”)
 with st.chat_message("assistant"):
-    st.markdown(summary)
-    if table.empty:
-        st.markdown("_No links available._")
-        st.session_state.messages.append({"role": "assistant", "content": "Listed 0 internships."})
-        st.stop()
+    st.markdown(assistant_md)
+    if not table.empty:
+        st.dataframe(
+            table[cols],
+            use_container_width=True,
+            hide_index=True,
+            column_config={"link": st.column_config.LinkColumn("link", help="Open posting")},
+        )
 
-    # Links list
-    lines = []
-    for i, r in enumerate(table.itertuples(index=False), start=1):
-        title = (getattr(r, "title", "") or "Internship").strip()
-        company = (getattr(r, "company", "") or "").strip()
-        label = f"{title}" + (f" — {company}" if company else "")
-        link = (getattr(r, "link", "") or "").strip()
-        lines.append(f"{i}. [{label}]({link}) — **Apply**")
-    st.markdown("**Apply links:**\n\n" + "\n".join(lines))
-
-    # Table
-    st.dataframe(
-        table[cols],
-        use_container_width=True,
-        hide_index=True,
-        column_config={"link": st.column_config.LinkColumn("link", help="Open posting")},
-    )
-
-st.session_state.messages.append({"role": "assistant", "content": f"Listed {len(table)} internships."})
+st.session_state.messages.append({"role": "assistant", "content": assistant_md})
