@@ -53,7 +53,7 @@ def _cache_age_hours() -> float:
     return (time.time() - PARQUET_PATH.stat().st_mtime) / 3600.0
 
 @st.cache_data(show_spinner=True)
-def fetch_all_internships(deep: bool = True) -> pd.DataFrame:
+def fetch_all_internships(deep: bool = False) -> pd.DataFrame:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     df = scrape_csusb_listings(deep=deep, max_pages=int(os.getenv("MAX_PAGES", "80")))
     df.to_parquet(PARQUET_PATH, index=False)
@@ -162,7 +162,7 @@ need_refresh = _cache_age_hours() > 6 or any(w in user_msg.lower() for w in ["re
 df = load_cached_df()
 if df.empty or need_refresh or ("details" not in df.columns):
     with st.spinner("Fetching internships from the CSUSB CSE Internships & Careers page…"):
-        df = fetch_all_internships(deep=True)
+        df = fetch_all_internships(deep=False)
 
 table = df.copy()
 
