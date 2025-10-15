@@ -16,8 +16,8 @@ JUNK_KEYWORDS = {
     "faculty & staff", "career center", "advising"
 }
 ALLOW_HOST_HINTS = {
-    "myworkdayjobs", "workday", "greenhouse", "lever", "taleo", "icims", "smartrecruiters",
-    "jobs", "careers", "career"
+    "myworkdayjobs", "workday", "greenhouse", "lever", "taleo", "icims",
+    "smartrecruiters", "jobs", "careers", "career"
 }
 
 RE_SALARY = re.compile(r"(\$[\d,]+(?:\s*[-–]\s*\$[\d,]+)?(?:\s*/\s*(?:hour|hr|month|year|yr))?)", re.I)
@@ -39,7 +39,7 @@ def _infer_company(u: str) -> Optional[str]:
 
 def _is_candidate_link(text: str, url: str) -> bool:
     low = f"{text} {url}".lower()
-    if any(k in low for k in JUNK_KEYWORDS): 
+    if any(k in low for k in JUNK_KEYWORDS):
         return False
     host = urlparse(url).netloc.lower()
     if any(h in host for h in JUNK_HOSTS):
@@ -59,7 +59,8 @@ def _extract_details(html_src: str) -> Dict[str, Optional[str]]:
     }
     if m := RE_SALARY.search(text): d["salary"] = m.group(1)
     if m := RE_EXP_YEARS.search(text):
-        d["exp_min"] = m.group(1);  d["exp_max"] = m.group(2) if m.group(2) else None
+        d["exp_min"] = m.group(1)
+        d["exp_max"] = m.group(2) if m.group(2) else None
     if m := RE_DEGREE.search(text): d["education"] = m.group(1).title()
     if m := RE_LOCATION_LINE.search(text): d["location"] = _clean(m.group(1))
     if re.search(r"\bremote\b", text, re.I): d["remote"] = "remote"
@@ -74,7 +75,7 @@ def _collect_links(page_html: str, base: str) -> List[Dict]:
     for a in main.find_all("a", href=True):
         text = _clean(a.get_text(" "))
         href = a["href"]
-        if not text: 
+        if not text:
             continue
         abs_url = urljoin(base, href)
         host = urlparse(abs_url).netloc.lower()
@@ -97,7 +98,9 @@ def _collect_links(page_html: str, base: str) -> List[Dict]:
         seen.add(key)
     return rows
 
-def scrape_csusb_listings(url: str = CSUSB_CSE_URL, timeout_ms: int = 60_000, deep: bool = True, max_pages: int = 80) -> pd.DataFrame:
+def scrape_csusb_listings(url: str = CSUSB_CSE_URL, timeout_ms: int = 60_000,
+                          deep: bool = True, max_pages: int = 80) -> pd.DataFrame:
+    """Scrape the CSUSB CSE Internships page and linked postings."""
     rows: List[Dict] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
@@ -105,8 +108,10 @@ def scrape_csusb_listings(url: str = CSUSB_CSE_URL, timeout_ms: int = 60_000, de
         page = ctx.new_page()
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            try: page.wait_for_load_state("networkidle", timeout=3000)
-            except Exception: pass
+            try:
+                page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                pass
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(600)
         except PWTimeout:
@@ -148,8 +153,47 @@ def scrape_csusb_listings(url: str = CSUSB_CSE_URL, timeout_ms: int = 60_000, de
         r["posted_date"] = r.get("posted_date") or today
 
     cols = [
-        "title","company","location","posted_date","tags","link","host","source",
-        "deadline","requirements","salary","education","remote","details"
+        "title", "company", "location", "posted_date", "tags", "link", "host", "source",
+        "deadline", "requirements", "salary", "education", "remote", "details"
     ]
     df = pd.DataFrame(rows, columns=cols)
     return df
+
+def quick_company_links_playwright(company_token: str, url: str = CSUSB_CSE_URL,
+                                   timeout_ms: int = 30_000) -> pd.DataFrame:
+    """Playwright fallback: return only anchors from the CSUSB page matching company_token."""
+    token = (company_token or "").strip().lower()
+    if not token:
+        return pd.DataFrame(columns=["title","company","location","posted_date","salary","education",
+                                     "remote","host","link","source","details"])
+    rows = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+        ctx = browser.new_context(user_agent=UA, viewport={"width":1280,"height":720})
+        page = ctx.new_page()
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            try: page.wait_for_load_state("networkidle", timeout=2000)
+            except Exception: pass
+            soup = BeautifulSoup(page.content(), "lxml")
+            main = soup.find("main") or soup
+            seen = set()
+            for a in main.find_all("a", href=True):
+                text = " ".join(a.get_text(" ", strip=True).split())
+                if not text: continue
+                href = urljoin(url, a["href"])
+                host = urlparse(href).netloc.lower()
+                key = (text.lower(), href)
+                if key in seen: continue
+                if token in text.lower() or token in host:
+                    rows.append({
+                        "title": text, "company": None, "location": None,
+                        "posted_date": None, "salary": None, "education": None,
+                        "remote": None, "host": host, "link": href,
+                        "source": url, "details": None
+                    })
+                    seen.add(key)
+        finally:
+            try: browser.close()
+            except Exception: pass
+    return pd.DataFrame(rows)
