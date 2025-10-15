@@ -1,26 +1,24 @@
-#!/usr/bin/env sh
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🧹 Cleaning up old containers and images for team2f25..."
+# If you started with DETACH=true, we can stop the named container.
+NAME="${NAME:-csusb-internship-agent}"
+IMAGE="${IMAGE:-internship-chatbot}"
+REMOVE_IMAGE="${REMOVE_IMAGE:-false}"
 
-# Stop and remove any container named team2f25 (if it exists)
-if docker ps -a --format '{{.Names}}' | grep -q '^team2f25$'; then
-  echo "Stopping and removing container 'team2f25'..."
-  docker rm -f team2f25 >/dev/null 2>&1 || true
+echo "==> Stopping/removing container (if running): ${NAME}"
+docker rm -f "${NAME}" >/dev/null 2>&1 || true
+
+# Also stop any container currently publishing port 5002 (safety net)
+CID_ON_PORT=$(docker ps --filter "publish=5002" --format "{{.ID}}" || true)
+if [[ -n "${CID_ON_PORT}" ]]; then
+  echo "==> Stopping container exposing port 5002: ${CID_ON_PORT}"
+  docker stop "${CID_ON_PORT}" >/dev/null 2>&1 || true
 fi
 
-# Stop any container using port 5002
-if docker ps --filter "publish=5002" --format '{{.ID}}' | grep -q .; then
-  echo "Stopping containers using port 5002..."
-  docker stop $(docker ps -q --filter "publish=5002") >/dev/null 2>&1 || true
+if [[ "${REMOVE_IMAGE}" == "true" ]]; then
+  echo "==> Removing image: ${IMAGE}"
+  docker rmi "${IMAGE}" >/dev/null 2>&1 || true
 fi
 
-# Optionally remove the old image (uncomment if you want a full rebuild each time)
-# echo "Removing old Docker image 'team2f25-streamlit:latest'..."
-# docker rmi -f team2f25-streamlit:latest >/dev/null 2>&1 || true
-
-# Clean dangling images/volumes (optional but nice)
-docker image prune -f >/dev/null 2>&1 || true
-docker container prune -f >/dev/null 2>&1 || true
-
-echo "✅ Cleanup complete!"
+echo "✓ Cleanup done."
