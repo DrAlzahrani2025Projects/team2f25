@@ -5,8 +5,8 @@ from datetime import datetime
 from pathlib import Path
 import os, re, html
 import pandas as pd
-from bs4 import BeautifulSoup # pyright: ignore[reportMissingImports]
-from playwright.sync_api import sync_playwright # pyright: ignore[reportMissingImports]
+from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 # ---------- constants ----------
 CSUSB_CSE_URL = "https://www.csusb.edu/cse/internships-careers"
