@@ -93,6 +93,36 @@ section[data-testid="stSidebar"]>div{
   background:var(--user-bubble) !important;
 }
 
+/* chat area container */
+section.main > div { padding-top: 12px; }
+
+/* message rows */
+[data-testid="stChatMessage"] {
+  margin: 14px 0;
+}
+
+/* bubble wrapper */
+[data-testid="stChatMessageContent"] {
+  border: 1px solid rgba(255,255,255,.08);
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: 0 1px 0 #0006 inset, 0 8px 20px #0002;
+  padding: 14px 16px;
+}
+
+/* try to distinguish user vs assistant using role data attribute */
+[data-testid="stChatMessage"][data-testid*="user"] [data-testid="stChatMessageContent"]{
+  background: #1f2a5a;
+  border-color: #5670ff33;
+}
+
+/* role chip (tiny label at the top of each bubble) */
+.stChatMessage .role-chip {
+  display:inline-block; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+  color: var(--muted); border:1px solid #ffffff22; padding:2px 6px; border-radius:999px;
+  background: var(--bg-elev); margin-bottom:6px;
+}
+
 /* Bot bubble */
 [data-testid="stChatMessage"]:nth-of-type(odd){
   background:var(--bot-bubble) !important;
