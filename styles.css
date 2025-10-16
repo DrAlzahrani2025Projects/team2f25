@@ -26,9 +26,9 @@ html, body, [data-testid="stAppViewContainer"] {
   font-family: var(--font);
   color: var(--text);
   background:
-  radial-gradient(1000px 600px at 30% -10%, #93c5fd22, transparent 60%),
-  radial-gradient(800px 400px at 100% 10%, #bfdbfe22, transparent 60%),
-  linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  radial-gradient(1200px 600px at 20% -10%, #e9d5ff55, transparent 70%),
+  radial-gradient(800px 400px at 100% 10%, #c4b5fd33, transparent 70%),
+  linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
 }
 
 /* (optional) reinforce */
@@ -82,14 +82,14 @@ section[data-testid="stSidebar"] > div{
 /* composer input itself */
 textarea[data-baseweb="textarea"]{
   background: transparent !important;
-  color: var(--text) !important;
+  color:#111827 !important;
   font-size: 15px !important;
 }
 
 /* send button (Streamlit secondary button) */
 button[kind="secondary"]{
-  border:1px solid #5670ff44 !important;
-  background: linear-gradient(180deg,#6d83ff,#5066ff) !important;
+  background:linear-gradient(180deg,#3b82f6,#2563eb) !important;
+  border:1px solid #2563eb33 !important;
   color: #fff !important;
   border-radius: 10px !important;
 }
@@ -191,3 +191,28 @@ h1 { letter-spacing:.2px; }
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
 @keyframes tdots{0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)}} 
+
+[data-testid="stChatMessageContent"]{
+  border-radius:18px;
+  background:var(--bot-bubble);
+  border:1px solid #e5e7eb;
+  box-shadow:0 2px 6px rgba(0,0,0,.04);
+}
+
+.stChatMessage:has(.role-chip.user) [data-testid="stChatMessageContent"]{
+  background:var(--user-bubble);
+  border-color:#bfdbfe;
+  box-shadow:0 2px 6px rgba(37,99,235,.08);
+}
+
+[data-testid="stChatMessage"] + [data-testid="stChatMessage"] {
+  margin-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+}
+
+[data-testid="stChatInput"]{
+  border:1px solid #d1d5db;
+  background:#ffffff;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+}
