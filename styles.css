@@ -1,23 +1,25 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+/* ---- base variables + google font ---- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root{
-  /* Light pastel palette */
-  --bg:#EAF4FF;            /* page background (light blue) */
-  --panel:#FFFFFF;         /* boxes / sidebar */
-  --text:#102A43;          /* dark slate text */
-  --muted:#5B7083;
+  --bg:#0f1220;
+  --bg-elev:#151932;
+  --card:#1a1f3d;
+  --text:#e4e7f1;
+  --muted:#9aa3b2;
+  --accent:#7aa2f7;
+  --accent-2:#a6da95;
+  --radius:14px;
+  --shadow:0 10px 30px rgba(0,0,0,.25);
+}
 
-  /* Bubble colors */
-  --user-bubble:#A8C5FF;    /* user bubble – soft blue */
-  --bot-bubble:#FFD6E0;     /* bot bubble – pink */
-  --input-bar:#F0F6FF;      /* input box */
-  --sidebar:#F6F9FE;        /* sidebar background */
-
-  --radius:9999px;          /* super-round corners */
-  --font:"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-
-  --bubble-shadow:0 8px 20px rgba(16,42,67,.08);
+html, body, [data-testid="stAppViewContainer"] {
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #3b4cca14, transparent 60%),
+    radial-gradient(1000px 500px at 120% 10%, #7aa2f710, transparent 60%),
+    linear-gradient(180deg, #0f1220 0%, #0a0d18 100%);
 }
 
 .stApp{
