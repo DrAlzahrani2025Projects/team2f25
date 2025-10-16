@@ -104,17 +104,24 @@ def is_smalltalk(txt: str) -> bool:
 if "greeted" not in st.session_state:
     st.session_state.greeted = False
 if "messages" not in st.session_state:
-    # seed with a single greeting; we won't repeat it again
     st.session_state.messages = [{
         "role": "assistant",
         "content": "Hey there! I’m Chatbot. How can I help today?"
     }]
-    st.session_state.greeted = True  # mark greeted once
+    st.session_state.greeted = True
 
-# Render history
+# --- Define message renderer (Phase 4 enhancement) ---
+def render_msg(role, content):
+    with st.chat_message(role):
+        st.markdown(
+            '<span class="role-chip">{}</span>'.format("you" if role == "user" else "assistant"),
+            unsafe_allow_html=True,
+        )
+        st.markdown(content)
+
+# --- Render existing history using the new renderer ---
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+    render_msg(m["role"], m["content"])
 
 def history_text(last_n: int = 8) -> str:
     msgs = st.session_state.messages[-last_n:]

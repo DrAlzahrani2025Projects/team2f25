@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl -fsSL https://ollama.com/install.sh | sh || true
 
 WORKDIR /app
+COPY styles.css ./
+COPY .streamlit ./ .streamlit/
 
 COPY requirements.txt .
 RUN python -m pip install --upgrade pip && \
