@@ -216,3 +216,26 @@ h1 { letter-spacing:.2px; }
   background:#ffffff;
   box-shadow:0 1px 3px rgba(0,0,0,.05);
 }
+
+/* prevent blue highlight / outline when typing */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible,
+textarea[data-baseweb="textarea"]:focus,
+textarea[data-baseweb="textarea"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #d1d5db !important;  /* neutral gray border */
+}
+
+/* optional: match your light purple theme */
+[data-testid="stChatInput"] textarea {
+  border: 1px solid #e0d7ff !important; /* light purple border */
+  background: #faf5ff !important;       /* very light lavender bg */
+  color: #111827 !important;
+}
+
+/* when focused, use a soft lavender border instead of blue */
+[data-testid="stChatInput"] textarea:focus {
+  border-color: #c4b5fd !important;     /* soft purple focus */
+  box-shadow: 0 0 0 2px #ddd6fe55 !important; /* faint glow */
+}
