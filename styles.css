@@ -27,6 +27,10 @@
   font-family:var(--font);
 }
 
+/* hide default Streamlit chrome */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+
 /* Sidebar */
 section[data-testid="stSidebar"]>div{
   background:var(--sidebar) !important;
