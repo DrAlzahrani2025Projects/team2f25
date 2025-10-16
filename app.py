@@ -22,7 +22,7 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💬", layout="wide")
 
 # --- CSS injector (loads styles.css and hot-reloads when it changes)
 def inject_css(path: str = "styles.css"):
-    p = Path(path)  # Path already imported at top
+    p = Path(path)
     if p.exists():
         mtime = p.stat().st_mtime
         key = "css_mtime"
@@ -30,7 +30,7 @@ def inject_css(path: str = "styles.css"):
             st.session_state[key] = mtime
             st.markdown(f"<style>{p.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-inject_css()  # must be before any other st.* UI
+inject_css()
 
 st.title(APP_TITLE)
 st.caption(
