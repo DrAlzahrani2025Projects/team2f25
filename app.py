@@ -126,6 +126,13 @@ def history_text(last_n: int = 8) -> str:
         lines.append(f"{who}: {m['content']}")
     return "\n".join(lines)
 
+def render_typing(role: str = "assistant"):
+    # use a placeholder so we can replace it with the real reply
+    ph = st.empty()
+    with st.chat_message(role, avatar=None):
+        ph.markdown('<div class="typing"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
+    return ph  # caller can .markdown(...) to replace
+
 # ---------- Rule-based small-talk replies (varied, short, no re-greeting) ----------
 def quick_smalltalk_reply(txt: str) -> str | None:
     s = txt.strip().lower()
@@ -291,7 +298,9 @@ else:
 
 # ---------- GENERAL CHAT ----------
 if route == "general":
+    ph = render_typing("assistant")
     reply = llm_general_reply(user_msg)
+    ph.markdown("")  
     render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
