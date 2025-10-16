@@ -26,9 +26,9 @@ html, body, [data-testid="stAppViewContainer"] {
   font-family: var(--font);
   color: var(--text);
   background:
-  radial-gradient(1200px 600px at 20% -10%, #e9d5ff55, transparent 70%),
-  radial-gradient(800px 400px at 100% 10%, #c4b5fd33, transparent 70%),
-  linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
+    radial-gradient(1000px 600px at 30% -10%, #93c5fd22, transparent 60%),
+    radial-gradient(800px 400px at 100% 10%, #bfdbfe22, transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 /* (optional) reinforce */
@@ -215,27 +215,4 @@ h1 { letter-spacing:.2px; }
   border:1px solid #d1d5db;
   background:#ffffff;
   box-shadow:0 1px 3px rgba(0,0,0,.05);
-}
-
-/* prevent blue highlight / outline when typing */
-[data-testid="stChatInput"] textarea:focus,
-[data-testid="stChatInput"] textarea:focus-visible,
-textarea[data-baseweb="textarea"]:focus,
-textarea[data-baseweb="textarea"]:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-  border-color: #d1d5db !important;  /* neutral gray border */
-}
-
-/* optional: match your light purple theme */
-[data-testid="stChatInput"] textarea {
-  border: 1px solid #e0d7ff !important; /* light purple border */
-  background: #faf5ff !important;       /* very light lavender bg */
-  color: #111827 !important;
-}
-
-/* when focused, use a soft lavender border instead of blue */
-[data-testid="stChatInput"] textarea:focus {
-  border-color: #c4b5fd !important;     /* soft purple focus */
-  box-shadow: 0 0 0 2px #ddd6fe55 !important; /* faint glow */
 }
