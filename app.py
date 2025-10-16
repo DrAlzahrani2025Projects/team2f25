@@ -4,6 +4,29 @@ from pathlib import Path
 from typing import List, Dict
 import pandas as pd
 import streamlit as st
+from flask import Flask, request, jsonify
+from intents import detect_intent
+
+app = Flask(__name__)
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    user_text = request.json.get("message", "").strip()
+    intent = detect_intent(user_text)
+
+    if intent == "empty":
+        reply = "Say hi or tell me what kind of internship you're looking for 😊"
+    elif intent == "greeting":
+        reply = "Hey! I'm your internship finder bot. Try: 'Find software internships in Bangalore for January.'"
+    elif intent == "search_internships":
+        reply = f"Got it — searching internships related to '{user_text}'..."
+    else:
+        reply = "Sorry, I didn’t get that. Try: 'Marketing internships in Delhi (paid)'."
+
+    return jsonify({"reply": reply})
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 from scraper import (
     scrape_csusb_listings,
