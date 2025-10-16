@@ -14,7 +14,8 @@ GENERIC_STOP = {
     "this","that","these","those","it","its","is","am","are","was","were","be","being","been",
     "do","does","did","a","an","the","and","or","but","if","then","else","than","not","no","yes",
     "please","hi","hello","hey","how","what","who","where","when","why","which","name","age",
-    "u","yo","sup","thanks","thank","thankyou",
+    "u","yo","sup","thanks","thank","thankyou","show","list","give","find",
+    "looking","searching","seeking",
 
     # previous stop words kept
     "intern","interns","internship","internships","job","jobs","career","careers",
