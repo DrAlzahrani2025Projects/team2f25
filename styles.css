@@ -9,12 +9,22 @@
   --muted:#9aa3b2;
   --accent:#7aa2f7;
   --accent-2:#a6da95;
+
+  /* added missing vars */
+  --font:"Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --sidebar:#12162a;
+  --input-bar:#0d1125;
+  --user-bubble:#1f2a5a;
+  --bot-bubble:#1a1f3d;
+  --panel:#141a33;
+  --bubble-shadow:0 1px 0 #0006 inset, 0 8px 20px #0002;
+
   --radius:14px;
   --shadow:0 10px 30px rgba(0,0,0,.25);
 }
 
 html, body, [data-testid="stAppViewContainer"] {
-  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: var(--font);
   color: var(--text);
   background:
     radial-gradient(1200px 600px at 20% -10%, #3b4cca14, transparent 60%),
@@ -22,24 +32,21 @@ html, body, [data-testid="stAppViewContainer"] {
     linear-gradient(180deg, #0f1220 0%, #0a0d18 100%);
 }
 
-.stApp{
-  background:var(--bg) !important;
-  color:var(--text) !important;
-  font-family:var(--font);
-}
+/* (optional) reinforce */
+.stApp{ background:var(--bg) !important; color:var(--text) !important; }
 
 /* hide default Streamlit chrome */
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 
 /* Sidebar */
-section[data-testid="stSidebar"]>div{
+section[data-testid="stSidebar"] > div{
   background:var(--sidebar) !important;
   border-radius:24px !important;
   margin:12px;
   padding-top:8px;
   box-shadow:var(--bubble-shadow);
-  border:1px solid rgba(0,0,0,.05);
+  border:1px solid rgba(255,255,255,.06);
 }
 
 /* Inputs */
@@ -47,11 +54,11 @@ section[data-testid="stSidebar"]>div{
   border-radius:18px !important;
   background:var(--input-bar) !important;
   color:var(--text) !important;
-  border:1px solid rgba(0,0,0,.06);
+  border:1px solid rgba(255,255,255,.08);
 }
 
 /* Buttons */
-.stButton>button{
+.stButton > button{
   border-radius:9999px !important;
   border:0;
   padding:.6rem 1.1rem;
@@ -61,48 +68,17 @@ section[data-testid="stSidebar"]>div{
   box-shadow:0 6px 14px rgba(91,141,239,.25);
   transition:transform .06s ease, box-shadow .2s ease, opacity .2s ease;
 }
-.stButton>button:hover{ transform:translateY(-1px); }
-.stButton>button:active{ transform:translateY(0); opacity:.95; }
+.stButton > button:hover{ transform:translateY(-1px); }
+.stButton > button:active{ transform:translateY(0); opacity:.95; }
 
 /* Chat input bar */
-[data-testid="stChatInput"]>div{
-  background:var(--input-bar) !important;
-  border:1px solid rgba(0,0,0,.06);
-  border-radius:24px !important;
-  box-shadow:var(--bubble-shadow);
-}
-
-/* Chat message bubbles */
-[data-testid="stChatMessage"]{
-  border-radius:var(--radius) !important;
-  padding:.9rem 1.1rem;
-  border:1px solid rgba(0,0,0,.05);
-  box-shadow:var(--bubble-shadow);
-  margin:.6rem 0;
-  color:var(--text);
-}
-
-/* removing avatar */
-[data-testid="stChatMessageAvatar"] { display: none !important; }
-
-/* adjusting padding */
-[data-testid="stChatMessage"] > div:first-child { padding-left: 0 !important; }
-
-/* User bubble */
-[data-testid="stChatMessage"]:nth-of-type(even){
-  background:var(--user-bubble) !important;
-}
-
-/* chat area container */
-section.main > div { padding-top: 12px; }
-
-/* composer container */
-[data-testid="stChatInput"] {
-  background: #0d1125;
+[data-testid="stChatInput"]{
+  background: var(--input-bar);
   border: 1px solid #ffffff12;
   border-radius: 12px;
   box-shadow: var(--shadow);
 }
+[data-testid="stChatInput"] > div{ background: transparent !important; }
 
 /* composer input itself */
 textarea[data-baseweb="textarea"]{
@@ -111,7 +87,7 @@ textarea[data-baseweb="textarea"]{
   font-size: 15px !important;
 }
 
-/* send button */
+/* send button (Streamlit secondary button) */
 button[kind="secondary"]{
   border:1px solid #5670ff44 !important;
   background: linear-gradient(180deg,#6d83ff,#5066ff) !important;
@@ -120,35 +96,32 @@ button[kind="secondary"]{
 }
 
 /* message rows */
-[data-testid="stChatMessage"] {
-  margin: 14px 0;
-}
+[data-testid="stChatMessage"]{ margin: 14px 0; }
+
+/* remove avatar + fix padding */
+[data-testid="stChatMessageAvatar"]{ display:none !important; }
+[data-testid="stChatMessage"] > div:first-child{ padding-left:0 !important; }
 
 /* bubble wrapper */
-[data-testid="stChatMessageContent"] {
+[data-testid="stChatMessageContent"]{
   border: 1px solid rgba(255,255,255,.08);
-  background: var(--card);
+  background: var(--bot-bubble);
   border-radius: 18px;
-  box-shadow: 0 1px 0 #0006 inset, 0 8px 20px #0002;
+  box-shadow: var(--bubble-shadow);
   padding: 14px 16px;
 }
 
-/* try to distinguish user vs assistant using role data attribute */
-[data-testid="stChatMessage"][data-testid*="user"] [data-testid="stChatMessageContent"]{
-  background: #1f2a5a;
-  border-color: #5670ff33;
-}
-
-/* role chip (tiny label at the top of each bubble) */
-.stChatMessage .role-chip {
+/* role chip */
+.stChatMessage .role-chip{
   display:inline-block; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
   color: var(--muted); border:1px solid #ffffff22; padding:2px 6px; border-radius:999px;
   background: var(--bg-elev); margin-bottom:6px;
 }
 
-/* Bot bubble */
-[data-testid="stChatMessage"]:nth-of-type(odd){
-  background:var(--bot-bubble) !important;
+/* Distinguish user bubbles using the chip we render in Python */
+.stChatMessage:has(.role-chip.user) [data-testid="stChatMessageContent"]{
+  background: var(--user-bubble);
+  border-color:#5670ff33;
 }
 
 /* Text inside bubbles */
@@ -158,10 +131,55 @@ button[kind="secondary"]{
 a{ color:#5B8DEF !important; text-decoration:none; }
 a:hover{ text-decoration:underline; }
 
+/* system notes */
+.system-note{
+  font-size:13px; color:var(--muted); font-style:italic;
+  border-left:3px solid #ffffff1a; padding-left:10px; margin-top:6px;
+}
+.link-pill{
+  display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #ffffff1a;
+  margin:6px 6px 0 0; font-size:13px; color:#cbd5e1; text-decoration:none;
+}
+.link-pill:hover{ border-color:#ffffff33; }
+
 /* Tables / cards */
 .stDataFrame, .stAlert, .stMetric, .stContainer{
   border-radius:18px !important;
   box-shadow:var(--bubble-shadow);
   background:var(--panel) !important;
-  border:1px solid rgba(0,0,0,.05);
+  border:1px solid rgba(255,255,255,.06);
+}
+
+/* kill any leftover avatar container just in case */
+.stChatMessage [data-testid="stChatMessageAvatar"],
+.stChatMessage [aria-label="chat message avatar"],
+.stChatMessage img[alt="avatar"] { display:none !important; }
+
+/* center the content column and give breathing room */
+[data-testid="stAppViewContainer"] > .main {
+  max-width: 980px; margin: 0 auto; padding: 24px 24px 96px;
+}
+
+/* header spacing + weight */
+h1 { letter-spacing:.2px; }
+
+/* make the composer stick to the bottom with a frosted look */
+[data-testid="stChatInput"]{
+  position: sticky; bottom: 16px; z-index: 5;
+  backdrop-filter: blur(6px);
+}
+
+/* bubbles a bit rounder + less contrast */
+[data-testid="stChatMessageContent"]{
+  border-radius: 20px;
+  background: #151a33; /* bot */
+}
+.stChatMessage:has(.role-chip.user) [data-testid="stChatMessageContent"]{
+  background: #1e2a5a; /* user */
+}
+
+/* role chip: compact + uppercase */
+.role-chip{
+  font-size: 10px; letter-spacing:.08em; opacity:.85;
+  padding: 2px 8px; border-radius: 999px;
 }
