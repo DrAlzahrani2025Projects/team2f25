@@ -19,6 +19,19 @@ PARQUET_PATH = DATA_DIR / "internships.parquet"
 
 # ---------- Page setup ----------
 st.set_page_config(page_title=APP_TITLE, page_icon="💬", layout="wide")
+
+from pathlib import Path
+def inject_css(path: str = "styles.css"):
+    p = Path(path)
+    if p.exists():
+        mtime = p.stat().st_mtime
+        key = "css_mtime"
+        if st.session_state.get(key) != mtime:
+            st.session_state[key] = mtime
+            st.markdown(f"<style>{p.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
+inject_css() 
+
 st.title(APP_TITLE)
 st.caption(
     f"Source: {CSUSB_CSE_URL} • Ask anything. For internships try: "
