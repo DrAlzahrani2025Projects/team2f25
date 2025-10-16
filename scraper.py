@@ -12,7 +12,6 @@ from playwright.sync_api import sync_playwright
 CSUSB_CSE_URL = "https://www.csusb.edu/cse/internships-careers"
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36"
 
-# We still expose these envs so your app doesn’t break, but we won’t use deep scraping.
 MAX_PAGES  = int(os.getenv("MAX_PAGES", "30"))
 TIMEOUT_MS = int(os.getenv("TIMEOUT_MS", "10000"))  # 10s timeout for the one CSUSB page
 

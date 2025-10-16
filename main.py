@@ -12,15 +12,14 @@ app = FastAPI(title="Local Qwen2 0.5B • LangChain (Ollama)")
 
 # --- Config ---
 OLLAMA_HOST   = (os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434") or "").rstrip("/")
-MODEL_NAME    = os.getenv("MODEL_NAME", "qwen2:0.5b")
+MODEL_NAME    = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
 SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "Answer concisely (1–3 sentences).")
 MAX_TOKENS    = int(os.getenv("MAX_TOKENS", "256"))
 NUM_CTX       = int(os.getenv("NUM_CTX", "2048"))
 
-# --- CORS (optional but helpful if UI runs elsewhere, e.g., Streamlit on 5002) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
