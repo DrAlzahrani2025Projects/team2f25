@@ -34,9 +34,7 @@ inject_css()  # must be before any other st.* UI
 
 st.title(APP_TITLE)
 st.caption(
-    f"Source: {CSUSB_CSE_URL} • Ask anything. For internships try: "
-    "“nasa internships”, “google internships”, “only java developer internships”, "
-    "“python qa remote”, or “show all internships”."
+    f'Source: {CSUSB_CSE_URL} • Ask anything. For internships try: "nasa internships", "google internships", "only java developer internships", "python qa remote", or "show all internships".'
 )
 
 # --- Mode toggle ---
@@ -52,7 +50,7 @@ def allow_query() -> bool:
         st.session_state.q_times.popleft()
     if len(st.session_state.q_times) >= 10:
         st.error(
-            "You’ve reached the limit of 10 questions per minute because the server has limited resources. "
+            "You've reached the limit of 10 questions per minute because the server has limited resources. "
             "Please try again in about a minute."
         )
         return False
@@ -75,15 +73,15 @@ def cache_age_hours() -> float:
     return (time.time() - PARQUET_PATH.stat().st_mtime) / 3600.0
 
 @st.cache_data(show_spinner=True, ttl=6*60*60)  # auto-refresh every 6 hours
-def fetch_csusb_df(max_pages: int = 80) -> pd.DataFrame:
+def fetch_csusb_df(max_pages: int = 80, deep: bool = True) -> pd.DataFrame:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df = scrape_csusb_listings(deep=False, max_pages=max_pages)
+    df = scrape_csusb_listings(deep=deep, max_pages=max_pages)
     df.to_parquet(PARQUET_PATH, index=False)
     return df
 
 # ---------- Small talk intents & patterns ----------
 SMALLTALK_PATTERNS = re.compile(
-    r"\b(hi|hello|hey|yo|sup|what'?s up|how are you|how’s it going|"
+    r"\b(hi|hello|hey|yo|sup|what'?s up|how are you|how's it going|"
     r"your name|who are you|name\??|thanks|thank you|ty|thx|"
     r"your age|how old are you|tell me a joke|joke|bye|goodbye|"
     r"what can you do|capabilities|help|idk|i don'?t know)\b",
@@ -99,7 +97,7 @@ if "greeted" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
-        "content": "Hey there! I’m Chatbot. How can I help today?"
+        "content": "Hey there! I'm Chatbot. How can I help today?"
     }]
     st.session_state.greeted = True
 
@@ -139,19 +137,19 @@ def quick_smalltalk_reply(txt: str) -> str | None:
 
     # greetings (follow-up)
     if re.search(r"\b(hi|hello|hey|yo|sup|what'?s up)\b", s):
-        return "Hey again! What’s up?"
+        return "Hey again! What's up?"
 
-    if "how are you" in s or "how’s it going" in s:
-        return "I’m doing well, thanks! How about you?"
+    if "how are you" in s or "how's it going" in s:
+        return "I'm doing well, thanks! How about you?"
 
     if "your name" in s or re.search(r"\bwho are you\b|\bname\??\b", s):
-        return "You can call me Chatbot. I’m your AI assistant."
+        return "You can call me Chatbot. I'm your AI assistant."
 
     if "your age" in s or "how old are you" in s:
-        return "I don’t have an age—just lots of energy to help. 🙂"
+        return "I don't have an age—just lots of energy to help. 😊"
 
     if "thanks" in s or "thank you" in s or s in {"ty", "thx"}:
-        return "You’re welcome!"
+        return "You're welcome!"
 
     if "sorry" in s:
         return "No worries!"
@@ -195,7 +193,7 @@ def llm_general_reply(user_text: str) -> str:
             "keeping replies short (1–4 sentences), natural, and human. "
             "Do NOT greet repeatedly; greet only once per session. "
             "Use first person and remember prior turns in the given chat history. "
-            "If you don’t know, say so briefly and ask one focused follow-up. "
+            "If you don't know, say so briefly and ask one focused follow-up. "
             "Avoid filler. Vary phrasing."
         )
         prompt = ChatPromptTemplate.from_messages([
@@ -205,7 +203,7 @@ def llm_general_reply(user_text: str) -> str:
         return (prompt | llm).invoke({"history": history_text(), "q": user_text}).content.strip()
     except Exception:
         # conservative fallback (never generic greeting)
-        return "Got it. I’ll keep it short—what outcome are you aiming for?"
+        return "Got it. I'll keep it short—what outcome are you aiming for?"
 
 # ---------- Utility helpers ----------
 def nontrivial_filters(f: dict) -> int:
@@ -244,9 +242,9 @@ def links_md(df: pd.DataFrame) -> str:
     for i, r in enumerate(df.itertuples(index=False), start=1):
         title = (getattr(r, "title", "") or "Internship").strip()
         company = (getattr(r, "company", "") or "").strip()
-        label = f"{title}" + (f" — {company}" if company else "")
+        label = f"{title}" + (f" – {company}" if company else "")
         link = (getattr(r, "link", "") or "").strip()
-        out.append(f"{i}. [{label}]({link}) — **Apply**")
+        out.append(f"{i}. [{label}]({link}) – **Apply**")
     return "\n".join(out)
 
 def any_match(df_: pd.DataFrame, cols: List[str], pattern: str, regex=True, flags=re.I):
@@ -311,12 +309,12 @@ df = load_cached_df()
 if df.empty or need_refresh or ("details" not in df.columns):
     if need_refresh:
         fetch_csusb_df.clear()  # force re-scrape on user request
-    with st.spinner("Fetching internships from the CSUSB CSE Internships & Careers page…"):
-        df = fetch_csusb_df(max_pages=int(os.getenv("MAX_PAGES", "80")))
+    with st.spinner("Fetching internships from career portals…"):
+        df = fetch_csusb_df(max_pages=int(os.getenv("MAX_PAGES", "80")), deep=True)
 
 table = df.copy()
 
-# Apply filters unless “show all”
+# Apply filters unless "show all"
 if not filters.get("show_all"):
     # Company
     comp = (filters.get("company_name") or "").strip()
@@ -350,11 +348,23 @@ if not filters.get("show_all"):
             pat = r"(" + "|".join(map(re.escape, title_tokens)) + r")"
             table = table[any_match(table, ["title","details"], pat, regex=True, flags=re.I)]
 
-    # Skills
+    # Skills - be lenient since job details might not contain all skills
+    # Only filter if skill is explicitly in title (not in details, which may be incomplete)
     for s in (filters.get("skills") or []):
         s = str(s).strip()
-        if s:
-            table = table[any_match(table, ["title","details"], re.escape(s), regex=True, flags=re.I)]
+        if s and len(s) > 1:  # Skip single char skills
+            # Only look in title for skills, since details might be incomplete
+            pattern = r"\b" + re.escape(s) + r"\b"
+            title_mask = any_match(table, ["title"], pattern, regex=True, flags=re.I)
+            
+            # If found in title, keep those rows; otherwise be more lenient
+            if title_mask.any():
+                table = table[title_mask]
+            # If not found in title, check details but be more forgiving
+            elif "details" in table.columns:
+                detail_mask = table["details"].fillna("").str.contains(s, regex=False, flags=re.I, na=False)
+                table = table[detail_mask]
+            # If still no match, don't filter (details might be too short)
 
     # Remote / location / misc
     if filters.get("remote_type"):
@@ -384,12 +394,20 @@ for c in cols:
         table[c] = None
 
 desc = describe_filters(filters)
-if len(table) == 0:
-    header = f"Sorry, I couldn’t find any internships on the CSUSB page" + (f" for **{desc}**." if desc else ".")
-else:
-    header = f"Here are **{len(table)}** internships from the CSUSB page" + (f" for **{desc}**." if desc else ".")
 
-answer_md = header + "\n\n" + links_md(table)
+# If very strict filtering removed everything, show a broader set
+if len(table) == 0 and len(df) > 0:
+    if has_filters:
+        st.sidebar.info(f"⚠️ No exact matches for '{desc}'. Showing all {len(df)} internships found.")
+        table = df.copy()  # Show all extracted jobs
+    
+if len(table) == 0:
+    header = f"Sorry, I couldn't find any internships" + (f" for **{desc}**." if desc else ".")
+    answer_md = header + "\n\n" + links_md(table)
+else:
+    match_text = f" matching **{desc}**" if desc else ""
+    header = f"Here are **{len(table)}** internships{match_text}."
+    answer_md = header + "\n\n" + links_md(table)
 
 render_msg("assistant", answer_md)
 if not table.empty:
