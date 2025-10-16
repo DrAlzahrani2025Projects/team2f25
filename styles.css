@@ -1,4 +1,3 @@
-/* Light + cute theme with round colorful chat bubbles */
 
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
@@ -80,6 +79,12 @@ section[data-testid="stSidebar"]>div{
   margin:.6rem 0;
   color:var(--text);
 }
+
+/* removing avatar */
+[data-testid="stChatMessageAvatar"] { display: none !important; }
+
+/* adjusting padding */
+[data-testid="stChatMessage"] > div:first-child { padding-left: 0 !important; }
 
 /* User bubble */
 [data-testid="stChatMessage"]:nth-of-type(even){
