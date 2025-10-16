@@ -7,7 +7,7 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
 
 # ---------- Keyword Sets ----------
-# Add common chat words so they don't become "filters"
+
 GENERIC_STOP = {
     # general/function words
     "i","you","your","yours","me","my","mine","we","our","ours","they","them","their","theirs",

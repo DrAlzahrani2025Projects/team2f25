@@ -20,7 +20,7 @@ PARQUET_PATH = DATA_DIR / "internships.parquet"
 # ---------- Page setup ----------
 st.set_page_config(page_title=APP_TITLE, page_icon="💬", layout="wide")
 
-from pathlib import Path
+# --- CSS injector (loads styles.css and hot-reloads when it changes)
 def inject_css(path: str = "styles.css"):
     p = Path(path)
     if p.exists():
@@ -30,7 +30,7 @@ def inject_css(path: str = "styles.css"):
             st.session_state[key] = mtime
             st.markdown(f"<style>{p.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-inject_css() 
+inject_css()
 
 st.title(APP_TITLE)
 st.caption(
@@ -38,13 +38,6 @@ st.caption(
     "“nasa internships”, “google internships”, “only java developer internships”, "
     "“python qa remote”, or “show all internships”."
 )
-
-# Load optional CSS
-try:
-    with open("styles.css", "r", encoding="utf-8") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except Exception:
-    pass
 
 # --- Mode toggle ---
 mode = st.sidebar.radio("Mode", ["Auto", "General chat", "Internships"], index=0)
@@ -104,17 +97,26 @@ def is_smalltalk(txt: str) -> bool:
 if "greeted" not in st.session_state:
     st.session_state.greeted = False
 if "messages" not in st.session_state:
-    # seed with a single greeting; we won't repeat it again
     st.session_state.messages = [{
         "role": "assistant",
         "content": "Hey there! I’m Chatbot. How can I help today?"
     }]
-    st.session_state.greeted = True  # mark greeted once
+    st.session_state.greeted = True
 
-# Render history
+# --- Define message renderer (unified bubble with role chip)
+def render_msg(role: str, content: str):
+    is_user = (role == "user")
+    with st.chat_message(role, avatar=None):
+        chip = (
+            f'<span class="role-chip{" user" if is_user else ""}">'
+            f'{"you" if is_user else "assistant"}</span>'
+        )
+        st.markdown(chip, unsafe_allow_html=True)
+        st.markdown(content)
+
+# --- Render existing history using the new renderer ---
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+    render_msg(m["role"], m["content"])
 
 def history_text(last_n: int = 8) -> str:
     msgs = st.session_state.messages[-last_n:]
@@ -123,6 +125,13 @@ def history_text(last_n: int = 8) -> str:
         who = "User" if m["role"] == "user" else "Assistant"
         lines.append(f"{who}: {m['content']}")
     return "\n".join(lines)
+
+def render_typing(role: str = "assistant"):
+    # use a placeholder so we can replace it with the real reply
+    ph = st.empty()
+    with st.chat_message(role, avatar=None):
+        ph.markdown('<div class="typing"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
+    return ph  # caller can .markdown(...) to replace
 
 # ---------- Rule-based small-talk replies (varied, short, no re-greeting) ----------
 def quick_smalltalk_reply(txt: str) -> str | None:
@@ -227,7 +236,10 @@ def describe_filters(f: dict) -> str:
     return ", ".join(parts)
 
 def links_md(df: pd.DataFrame) -> str:
-    if df.empty: return "_No links available._"
+    if df.empty:
+        st.markdown('<div class="system-note">No links available.</div>', unsafe_allow_html=True)
+        return ""
+
     out = ["**Apply links:**\n"]
     for i, r in enumerate(df.itertuples(index=False), start=1):
         title = (getattr(r, "title", "") or "Internship").strip()
@@ -255,8 +267,7 @@ if not allow_query():
     st.stop()
 
 st.session_state.messages.append({"role": "user", "content": user_msg})
-with st.chat_message("user"):
-    st.markdown(user_msg)
+render_msg("user", user_msg)
 
 # ---------- Routing ----------
 filters = parse_query_to_filter(user_msg)
@@ -287,9 +298,10 @@ else:
 
 # ---------- GENERAL CHAT ----------
 if route == "general":
+    ph = render_typing("assistant")
     reply = llm_general_reply(user_msg)
-    with st.chat_message("assistant"):
-        st.markdown(reply)
+    ph.markdown("")  
+    render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
 
@@ -379,14 +391,13 @@ else:
 
 answer_md = header + "\n\n" + links_md(table)
 
-with st.chat_message("assistant"):
-    st.markdown(answer_md)
-    if not table.empty:
-        st.dataframe(
-            table[cols],
-            use_container_width=True,
-            hide_index=True,
-            column_config={"link": st.column_config.LinkColumn("link", help="Open posting")},
-        )
+render_msg("assistant", answer_md)
+if not table.empty:
+    st.dataframe(
+        table[cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={"link": st.column_config.LinkColumn("link", help="Open posting")},
+    )
 
 st.session_state.messages.append({"role": "assistant", "content": answer_md})

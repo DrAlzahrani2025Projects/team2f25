@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+
 set -euo pipefail
 
 IMAGE="${IMAGE:-internship-chatbot}"
