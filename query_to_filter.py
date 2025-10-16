@@ -1,15 +1,26 @@
 import os, re, json
-from typing import Dict, Any, List
+from typing import Dict, Any
 
+# ---------- Configuration ----------
 USE_OLLAMA = True
-OLLAMA_HOST = os.getenv("OLLAMA_HOST","http://127.0.0.1:11434")
-MODEL_NAME  = os.getenv("MODEL_NAME","qwen2.5:0.5b")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
 
+# ---------- Keyword Sets ----------
+# Add common chat words so they don't become "filters"
 GENERIC_STOP = {
+    # general/function words
+    "i","you","your","yours","me","my","mine","we","our","ours","they","them","their","theirs",
+    "this","that","these","those","it","its","is","am","are","was","were","be","being","been",
+    "do","does","did","a","an","the","and","or","but","if","then","else","than","not","no","yes",
+    "please","hi","hello","hey","how","what","who","where","when","why","which","name","age",
+    "u","yo","sup","thanks","thank","thankyou",
+
+    # previous stop words kept
     "intern","interns","internship","internships","job","jobs","career","careers",
     "opening","openings","position","positions","apply","application","role","roles",
-    "only","strict","exact","just","show","list","give","find","me","the","a","an",
-    "in","at","for","from","to","please","csusb","cse","website","site","listed"
+    "only","strict","exact","just","show","list","give","find",
+    "in","at","for","from","to","csusb","cse","website","site","listed"
 }
 
 KNOWN_COMPANIES = {
@@ -29,9 +40,10 @@ TECH_SKILLS = {
 
 GREETINGS = {
     "hi","hello","hey","how are you","good morning","good afternoon","good evening",
-    "what is your name","your name","who are you","help","thanks","thank you"
+    "what is your name","your name","who are you","help","thanks","thank you","your age","how old are you"
 }
 
+# ---------- Helpers ----------
 def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str,Any]:
     try:
         from langchain_ollama import ChatOllama
@@ -73,11 +85,11 @@ def _extract_skills_and_keywords(s: str, company_name: str | None) -> tuple[list
         keywords.append(t)
     return skills[:6], keywords[:6]
 
+# ---------- Query Parsing ----------
 def parse_query_to_filter(q: str) -> Dict[str,Any]:
     if not q: return {}
     s = q.strip()
 
-    # Robust “show all” (includes “csusb listed internships”)
     show_all = bool(re.search(
         r"\b(?:show|list|give|fetch|display)\s+(?:all|every)\s+internship[s]?\b"
         r"|csusb\s+(?:listed|list)\s+internship[s]?", s, re.I))
@@ -106,23 +118,26 @@ def parse_query_to_filter(q: str) -> Dict[str,Any]:
 
     return data
 
+# ---------- Intent Classification ----------
 def classify_intent(q: str) -> str:
     s = (q or "").lower().strip()
 
-    # small talk path
-    if s in GREETINGS or any(g == s for g in GREETINGS):
+    # Small talk path
+    if s in GREETINGS or any(g in s for g in GREETINGS):
         return "general_question"
 
-    # any job-ish word forces internship path
-    if re.search(r"\bintern|co[-\s]?op|job|role|opening|position|career|apply|hiring\b", s):
+    # Explicit internship / job requests
+    if re.search(r"\bintern(ship|ships)?\b", s):
+        return "internship_search"
+    if re.search(r"\b(find|show|list|apply|search|available|display|get)\b.*\b(intern|job|role|position|career|opening)\b", s):
         return "internship_search"
 
-    # explicit “show all”
+    # “show all internships”
     if re.search(r"\b(all|every)\s+internship[s]?\b", s) or \
        re.search(r"csusb\s+(listed|list)\s+internship[s]?", s):
         return "internship_search"
 
-    # tiny LLM check (optional safeguard)
+    # Tiny LLM backstop (optional)
     try:
         d = _llm_json("Return exactly 'internship_search' or 'general_question'.", s, 512, 20, 0.0)
         txt = (json.dumps(d).lower() if isinstance(d, dict) else str(d).lower())
@@ -130,4 +145,5 @@ def classify_intent(q: str) -> str:
         if "general" in txt: return "general_question"
     except Exception:
         pass
+
     return "general_question"
