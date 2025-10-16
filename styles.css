@@ -96,6 +96,29 @@ section[data-testid="stSidebar"]>div{
 /* chat area container */
 section.main > div { padding-top: 12px; }
 
+/* composer container */
+[data-testid="stChatInput"] {
+  background: #0d1125;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+/* composer input itself */
+textarea[data-baseweb="textarea"]{
+  background: transparent !important;
+  color: var(--text) !important;
+  font-size: 15px !important;
+}
+
+/* send button */
+button[kind="secondary"]{
+  border:1px solid #5670ff44 !important;
+  background: linear-gradient(180deg,#6d83ff,#5066ff) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+}
+
 /* message rows */
 [data-testid="stChatMessage"] {
   margin: 14px 0;
