@@ -7,7 +7,6 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
 
 # ---------- Keyword Sets ----------
-
 GENERIC_STOP = {
     # general/function words
     "i","you","your","yours","me","my","mine","we","our","ours","they","them","their","theirs",
@@ -16,17 +15,11 @@ GENERIC_STOP = {
     "please","hi","hello","hey","how","what","who","where","when","why","which","name","age",
     "u","yo","sup","thanks","thank","thankyou",
 
-    # previous stop words kept
+    # job-search generic words (don’t treat them as keywords)
     "intern","interns","internship","internships","job","jobs","career","careers",
     "opening","openings","position","positions","apply","application","role","roles",
     "only","strict","exact","just","show","list","give","find",
     "in","at","for","from","to","csusb","cse","website","site","listed"
-}
-
-KNOWN_COMPANIES = {
-    "nasa","google","microsoft","oracle","pfizer","pwc","lanl","kpmg","goldman sachs","ibm",
-    "boeing","northrop","northrop grumman","lockheed","lockheed martin","raytheon","virgin galactic",
-    "doe","naval","navsea","merck","disney","edwards","jpmorgan","jp morgan","apple","meta","amazon"
 }
 
 TECH_SKILLS = {
@@ -40,110 +33,139 @@ TECH_SKILLS = {
 
 GREETINGS = {
     "hi","hello","hey","how are you","good morning","good afternoon","good evening",
-    "what is your name","your name","who are you","help","thanks","thank you","your age","how old are you"
+    "what is your name","your name","who are you","help","thanks","thank you",
+    "your age","how old are you"
 }
 
-# ---------- Helpers ----------
-def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str,Any]:
+# ---------- LLM helper ----------
+def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str, Any]:
+    """
+    Call local Ollama via langchain_ollama. Return {} on any failure so the app keeps running.
+    """
     try:
         from langchain_ollama import ChatOllama
         from langchain.prompts import ChatPromptTemplate
         tmpl = ChatPromptTemplate.from_messages([("system", sys_msg), ("human", "{q}")])
-        llm = ChatOllama(base_url=OLLAMA_HOST, model=MODEL_NAME, temperature=temp, streaming=False,
-                         model_kwargs={"num_ctx": num_ctx, "num_predict": num_predict})
+        llm = ChatOllama(
+            base_url=OLLAMA_HOST, model=MODEL_NAME,
+            temperature=temp, streaming=False,
+            model_kwargs={"num_ctx": num_ctx, "num_predict": num_predict},
+        )
         out = (tmpl | llm).invoke({"q": user}).content
         m = re.search(r"\{[\s\S]*\}", out)
         return json.loads(m.group(0) if m else out)
     except Exception:
         return {}
 
-def _extract_company_heuristic(s: str) -> str | None:
-    s_low = s.lower()
-    if m := re.search(r"\b(?:at|for|from|to)\s+([a-z][a-z\.\-&\s]{2,30})", s_low):
-        cand = m.group(1).strip(" .-")
-        cand = re.sub(r"\.(com|gov|edu|org).*","", cand)
-        return cand
-    for c in KNOWN_COMPANIES:
-        if c in s_low: return c
-    if m := re.search(r"\b([a-z0-9\-]+)\.(?:gov|com|edu|org)\b", s_low):
-        return m.group(1)
-    return None
-
-def _extract_skills_and_keywords(s: str, company_name: str | None) -> tuple[list[str], list[str]]:
+# ---------- Local tokenization (used only for skills/keywords fallback) ----------
+def _extract_skills_and_keywords(s: str) -> tuple[list[str], list[str]]:
     tokens = [t.lower() for t in re.findall(r"[A-Za-z][A-Za-z0-9\.\+#\-]{1,}", s)]
-    comp_parts = set()
-    if company_name:
-        comp_parts = {w for w in re.split(r"[\s\-]+", company_name.lower()) if len(w) > 2}
     skills, keywords = [], []
     for t in tokens:
         if t in GENERIC_STOP:
             continue
-        if company_name and (t == company_name or t in comp_parts):
-            continue
         if t in TECH_SKILLS:
-            skills.append(t); continue
-        keywords.append(t)
+            skills.append(t)
+        else:
+            keywords.append(t)
     return skills[:6], keywords[:6]
 
 # ---------- Query Parsing ----------
-def parse_query_to_filter(q: str) -> Dict[str,Any]:
-    if not q: return {}
+def parse_query_to_filter(q: str) -> Dict[str, Any]:
+    if not q:
+        return {}
+
     s = q.strip()
 
-    show_all = bool(re.search(
-        r"\b(?:show|list|give|fetch|display)\s+(?:all|every)\s+internship[s]?\b"
-        r"|csusb\s+(?:listed|list)\s+internship[s]?", s, re.I))
+    # Strict schema: LLM is the single source of truth for company, intent & location.
+    sys = (
+        "You extract job-search filters from a short user query.\n"
+        "Return ONLY compact JSON with these keys (omit keys that don't apply):\n"
+        "{\n"
+        '  "intent": "internship_search|general_question",\n'
+        '  "company_name": "string",\n'
+        '  "title_keywords": ["token", ...],\n'
+        '  "skills": ["token", ...],\n'
+        '  "show_all": true|false,\n'
+        '  "role_match": "broad|strict",\n'
+        '  "city": "string",\n'
+        '  "state": "string",\n'
+        '  "country": "string",\n'
+        '  "zipcode": "string",\n'
+        '  "remote_type": "remote|hybrid|onsite"\n'
+        "}\n"
+        "Rules:\n"
+        "- Never infer or guess any location fields; include them ONLY if the user explicitly typed them.\n"
+        "- Lower-case tokens; keep arrays ≤ 6; avoid nulls; do not invent values."
+    )
 
-    role_match = "strict" if re.search(r"\b(strict|exact|only|just)\b", s, re.I) else "broad"
-    company_name = _extract_company_heuristic(s)
-    skills, keywords = _extract_skills_and_keywords(s, company_name)
-
-    data = {
-        "title_keywords": keywords,
-        "skills": skills,
-        "company_name": company_name,
-        "role_match": role_match,
-        "show_all": show_all,
-    }
-
+    llm_data: Dict[str, Any] = {}
     if USE_OLLAMA:
-        sys=("Extract job filters; return JSON keys (omit nulls): "
-             "title_keywords, skills, city, state, country, zipcode, remote_type, employment_type, "
-             "experience_level, education_level, salary_min, salary_max, company_name, role_match, show_all. "
-             "Lower-case tokens; arrays ≤6; do not invent.")
         llm_data = _llm_json(sys, s)
-        if isinstance(llm_data, dict):
-            llm_data.update(data)
-            return llm_data
+        if not isinstance(llm_data, dict):
+            llm_data = {}
 
-    return data
+    # Fallbacks if LLM is unavailable or returns nothing
+    # role_match + show_all from simple regex cues
+    role_match = "strict" if re.search(r"\b(strict|exact|only|just)\b", s, re.I) else "broad"
+    show_all = bool(
+        re.search(r"\b(?:show|list|give|fetch|display)\s+(?:all|every)\s+internship[s]?\b", s, re.I) or
+        re.search(r"\bcsusb\s+(?:listed|list)\s+internship[s]?\b", s, re.I)
+    )
+    skills, keywords = _extract_skills_and_keywords(s)
+
+    # Merge fallbacks only if missing
+    llm_data.setdefault("role_match", role_match)
+    llm_data.setdefault("show_all", show_all)
+    llm_data.setdefault("title_keywords", keywords)
+    llm_data.setdefault("skills", skills)
+
+    # Normalize arrays and intent
+    llm_data["title_keywords"] = [t.strip().lower() for t in llm_data.get("title_keywords", [])][:6]
+    llm_data["skills"] = [t.strip().lower() for t in llm_data.get("skills", [])][:6]
+    if not llm_data.get("intent"):
+        llm_data["intent"] = "internship_search" if re.search(r"\bintern", s, re.I) else "general_question"
+
+    # Belt & suspenders: drop any location fields if the user did NOT type a location cue.
+    explicit_loc = re.search(
+        r"\b(remote|onsite|hybrid|usa|united states|uk|england|canada|india|london|new york|ny|ca|tx|\d{5})\b",
+        s, re.I
+    )
+    if not explicit_loc:
+        for k in ("city", "state", "country", "zipcode"):
+            llm_data.pop(k, None)
+
+    return llm_data
 
 # ---------- Intent Classification ----------
 def classify_intent(q: str) -> str:
+    """
+    Prefer the LLM’s intent. Fall back to lightweight regex so the app still works
+    if the LLM is unavailable. No relative imports; GREETINGS is local.
+    """
     s = (q or "").lower().strip()
 
-    # Small talk path
+    # small-talk fast path
     if s in GREETINGS or any(g in s for g in GREETINGS):
         return "general_question"
 
-    # Explicit internship / job requests
+    # Ask the tiny LLM directly (deterministic)
+    if USE_OLLAMA:
+        d = _llm_json(
+            'Return JSON exactly like {"intent":"internship_search"} or {"intent":"general_question"}. '
+            "If the user typed only a company name, treat it as internship_search.",
+            s, num_ctx=512, num_predict=30, temp=0.0
+        )
+        if isinstance(d, dict) and d.get("intent") in {"internship_search", "general_question"}:
+            return d["intent"]
+
+    # Fallbacks (model off / failure)
     if re.search(r"\bintern(ship|ships)?\b", s):
         return "internship_search"
     if re.search(r"\b(find|show|list|apply|search|available|display|get)\b.*\b(intern|job|role|position|career|opening)\b", s):
         return "internship_search"
-
-    # “show all internships”
-    if re.search(r"\b(all|every)\s+internship[s]?\b", s) or \
-       re.search(r"csusb\s+(listed|list)\s+internship[s]?", s):
+    # Treat a short single token (likely a company/domain) as internship intent
+    if re.fullmatch(r"[a-z0-9\.\- ]{2,30}", s) and not re.search(r"\b(hi|hello|help|thanks)\b", s):
         return "internship_search"
-
-    # Tiny LLM backstop (optional)
-    try:
-        d = _llm_json("Return exactly 'internship_search' or 'general_question'.", s, 512, 20, 0.0)
-        txt = (json.dumps(d).lower() if isinstance(d, dict) else str(d).lower())
-        if "internship" in txt: return "internship_search"
-        if "general" in txt: return "general_question"
-    except Exception:
-        pass
 
     return "general_question"
