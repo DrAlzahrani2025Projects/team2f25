@@ -18,9 +18,9 @@ DATA_DIR = Path("data")
 PARQUET_PATH = DATA_DIR / "internships.parquet"
 
 # ---------- Page setup ----------
-st.set_page_config(page_title=APP_TITLE, page_icon="💬", layout="wide")
+st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
 
-# --- CSS injector (loads styles.css and hot-reloads when it changes)
+# --- CSS injector ---
 def inject_css(path: str = "styles.css"):
     p = Path(path)
     if p.exists():
@@ -34,13 +34,17 @@ inject_css()
 
 st.title(APP_TITLE)
 st.caption(
-    f"Source: {CSUSB_CSE_URL} • Ask anything. For internships try: "
-    "“nasa internships”, “google internships”, “only java developer internships”, "
-    "“python qa remote”, or “show all internships”."
+    f"🎯 Deep search enabled • Source: {CSUSB_CSE_URL}\n\n"
+    "Try: **nasa internships**, **google remote intern**, **only java developer**, **show all internships**"
 )
 
 # --- Mode toggle ---
 mode = st.sidebar.radio("Mode", ["Auto", "General chat", "Internships"], index=0)
+deep_mode = st.sidebar.checkbox("Deep Search", value=False, help="⚠️ Slow: Scrapes company career pages for detailed postings (recommended: OFF for first try)")
+
+st.sidebar.markdown("---")
+st.sidebar.caption("⚙️ **Settings**")
+max_pages = st.sidebar.slider("Max company pages", 5, 50, 10, 5, help="Number of company sites to deep-scrape")
 
 # ---------- Rate limit (10/min) ----------
 if "q_times" not in st.session_state:
@@ -51,10 +55,7 @@ def allow_query() -> bool:
     while st.session_state.q_times and (now - st.session_state.q_times[0]) > 60:
         st.session_state.q_times.popleft()
     if len(st.session_state.q_times) >= 10:
-        st.error(
-            "You’ve reached the limit of 10 questions per minute because the server has limited resources. "
-            "Please try again in about a minute."
-        )
+        st.error("⏱️ Rate limit reached: 10 queries per minute. Please wait ~60 seconds.")
         return False
     st.session_state.q_times.append(now)
     return True
@@ -74,180 +75,118 @@ def cache_age_hours() -> float:
         return math.inf
     return (time.time() - PARQUET_PATH.stat().st_mtime) / 3600.0
 
-@st.cache_data(show_spinner=True, ttl=6*60*60)  # auto-refresh every 6 hours
-def fetch_csusb_df(max_pages: int = 80) -> pd.DataFrame:
+@st.cache_data(show_spinner=False, ttl=6*60*60)
+def fetch_csusb_df(max_pages: int = 80, deep: bool = True) -> pd.DataFrame:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df = scrape_csusb_listings(deep=False, max_pages=max_pages)
+    df = scrape_csusb_listings(deep=deep, max_pages=max_pages)
     df.to_parquet(PARQUET_PATH, index=False)
     return df
 
-# ---------- Small talk intents & patterns ----------
+# ---------- Small talk patterns ----------
 SMALLTALK_PATTERNS = re.compile(
-    r"\b(hi|hello|hey|yo|sup|what'?s up|how are you|how’s it going|"
-    r"your name|who are you|name\??|thanks|thank you|ty|thx|"
-    r"your age|how old are you|tell me a joke|joke|bye|goodbye|"
-    r"what can you do|capabilities|help|idk|i don'?t know)\b",
-    re.I,
+    r"\b(hi|hello|hey|yo|sup|what'?s up|how are you|"
+    r"your name|who are you|thanks|thank you|joke|help)\b", re.I
 )
 
 def is_smalltalk(txt: str) -> bool:
     return bool(SMALLTALK_PATTERNS.search(txt))
 
 # ---------- Conversational memory ----------
-if "greeted" not in st.session_state:
-    st.session_state.greeted = False
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
-        "content": "Hey there! I’m Chatbot. How can I help today?"
+        "content": "👋 Hey! I'm your CSUSB Internship Finder. I can search the CSUSB CSE page and deep-dive into company career sites. What are you looking for?"
     }]
-    st.session_state.greeted = True
 
-# --- Define message renderer (unified bubble with role chip)
+# --- Message renderer ---
 def render_msg(role: str, content: str):
-    is_user = (role == "user")
-    with st.chat_message(role, avatar=None):
-        chip = (
-            f'<span class="role-chip{" user" if is_user else ""}">'
-            f'{"you" if is_user else "assistant"}</span>'
-        )
-        st.markdown(chip, unsafe_allow_html=True)
+    with st.chat_message(role, avatar="👤" if role == "user" else "🤖"):
         st.markdown(content)
 
-# --- Render existing history using the new renderer ---
+# --- Render history ---
 for m in st.session_state.messages:
     render_msg(m["role"], m["content"])
 
 def history_text(last_n: int = 8) -> str:
     msgs = st.session_state.messages[-last_n:]
-    lines = []
-    for m in msgs:
-        who = "User" if m["role"] == "user" else "Assistant"
-        lines.append(f"{who}: {m['content']}")
-    return "\n".join(lines)
+    return "\n".join([f"{'User' if m['role']=='user' else 'Assistant'}: {m['content']}" for m in msgs])
 
-def render_typing(role: str = "assistant"):
-    # use a placeholder so we can replace it with the real reply
-    ph = st.empty()
-    with st.chat_message(role, avatar=None):
-        ph.markdown('<div class="typing"><span></span><span></span><span></span></div>', unsafe_allow_html=True)
-    return ph  # caller can .markdown(...) to replace
-
-# ---------- Rule-based small-talk replies (varied, short, no re-greeting) ----------
+# ---------- Small-talk replies ----------
 def quick_smalltalk_reply(txt: str) -> str | None:
     s = txt.strip().lower()
-
-    # greetings (follow-up)
-    if re.search(r"\b(hi|hello|hey|yo|sup|what'?s up)\b", s):
-        return "Hey again! What’s up?"
-
-    if "how are you" in s or "how’s it going" in s:
-        return "I’m doing well, thanks! How about you?"
-
-    if "your name" in s or re.search(r"\bwho are you\b|\bname\??\b", s):
-        return "You can call me Chatbot. I’m your AI assistant."
-
-    if "your age" in s or "how old are you" in s:
-        return "I don’t have an age—just lots of energy to help. 🙂"
-
-    if "thanks" in s or "thank you" in s or s in {"ty", "thx"}:
-        return "You’re welcome!"
-
-    if "sorry" in s:
-        return "No worries!"
-
+    if re.search(r"\b(hi|hello|hey)\b", s):
+        return "Hey! Ready to find some internships? 🚀"
+    if "how are you" in s:
+        return "I'm doing great! How can I help you today?"
+    if "your name" in s or "who are you" in s:
+        return "I'm your CSUSB Internship Finder – powered by AI!"
+    if "thanks" in s or "thank you" in s:
+        return "You're welcome! 😊"
     if "joke" in s:
-        return "Why did the developer go broke? They used up all their cache."
-
-    if s in {"bye", "goodbye"}:
-        return "Take care! Ping me anytime."
-
-    if "what can you do" in s or "capabilities" in s or s == "help":
-        return ("I can chat, answer questions, brainstorm, draft or edit text, "
-                "summarize content, and find CSUSB internship links. What do you need?")
-
-    if s in {"idk", "i dont know", "i don't know"}:
-        return "No problem—want to: (1) learn something, (2) write or edit text, or (3) plan a task?"
-
+        return "Why did the intern bring a ladder? To reach new career heights! 😄"
+    if "help" in s:
+        return "I can search CSUSB internships and deep-scrape company sites. Try: **google internships**"
     return None
 
-# ---------- General chat with LLM fallback (uses history, short & human) ----------
+# ---------- General chat with LLM ----------
 def llm_general_reply(user_text: str) -> str:
-    # 1) small-talk rules first (most deterministic)
     quick = quick_smalltalk_reply(user_text)
     if quick:
         return quick
-
-    # 2) LLM for everything else
     try:
         from langchain_ollama import ChatOllama
         from langchain.prompts import ChatPromptTemplate
         llm = ChatOllama(
             base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
             model=os.getenv("MODEL_NAME", "qwen2.5:0.5b"),
-            temperature=0.3,
-            streaming=False,
-            model_kwargs={"num_ctx": 1536, "num_predict": 180},
+            temperature=0.3, streaming=False,
+            model_kwargs={"num_ctx": 1536, "num_predict": 180}
         )
-
-        sys = (
-            "You are a helpful, friendly assistant. Reply contextually to each message, "
-            "keeping replies short (1–4 sentences), natural, and human. "
-            "Do NOT greet repeatedly; greet only once per session. "
-            "Use first person and remember prior turns in the given chat history. "
-            "If you don’t know, say so briefly and ask one focused follow-up. "
-            "Avoid filler. Vary phrasing."
-        )
+        sys = "You are a helpful assistant for CSUSB internship search. Keep replies concise and encouraging."
         prompt = ChatPromptTemplate.from_messages([
             ("system", sys),
-            ("human", "Chat history:\n{history}\n\nUser: {q}\nAssistant (concise):")
+            ("human", "History:\n{history}\n\nUser: {q}")
         ])
         return (prompt | llm).invoke({"history": history_text(), "q": user_text}).content.strip()
-    except Exception:
-        # conservative fallback (never generic greeting)
-        return "Got it. I’ll keep it short—what outcome are you aiming for?"
+    except:
+        return "I'm here to help! What would you like to know? 💡"
 
 # ---------- Utility helpers ----------
 def nontrivial_filters(f: dict) -> int:
-    """
-    Count real job filters; ignore random words so small-talk doesn't trigger internship mode.
-    """
     n = 0
     if f.get("show_all"): n += 1
     if f.get("company_name") and len(str(f["company_name"]).strip()) > 2: n += 1
     if any(len(str(s).strip()) > 1 for s in (f.get("skills") or [])): n += 1
-
-    JOBISH = {"intern","developer","engineer","analyst","qa","data","software","security","cloud","ml","ai"}
-    tks = [str(t).lower().strip() for t in (f.get("title_keywords") or [])]
-    if any(t in JOBISH for t in tks):
-        n += 1
-
-    if any(f.get(k) for k in ("city","state","country","zipcode","remote_type","education_level","experience_level","salary_min")):
+    JOBISH = {"intern","developer","engineer","analyst","qa","data","software"}
+    if any(t in JOBISH for t in [str(t).lower() for t in (f.get("title_keywords") or [])]):
         n += 1
     return n
 
 def describe_filters(f: dict) -> str:
     parts = []
-    if f.get("company_name"): parts.append(f["company_name"])
+    if f.get("company_name"): parts.append(f"**{f['company_name']}**")
     if f.get("title_keywords"): parts.append(" ".join(f["title_keywords"]))
-    if f.get("skills"): parts.append(" ".join(f["skills"]))
-    loc = " ".join(filter(None, [f.get("city"), f.get("state"), f.get("country")]))
-    if loc: parts.append(loc)
-    return ", ".join(parts)
+    if f.get("skills"): parts.append(f"({', '.join(f['skills'])})")
+    if f.get("city") or f.get("state"):
+        parts.append(" ".join(filter(None, [f.get("city"), f.get("state")])))
+    return " • ".join(parts)
 
 def links_md(df: pd.DataFrame) -> str:
     if df.empty:
-        st.markdown('<div class="system-note">No links available.</div>', unsafe_allow_html=True)
         return ""
-
-    out = ["**Apply links:**\n"]
+    out = []
     for i, r in enumerate(df.itertuples(index=False), start=1):
         title = (getattr(r, "title", "") or "Internship").strip()
         company = (getattr(r, "company", "") or "").strip()
-        label = f"{title}" + (f" — {company}" if company else "")
+        location = (getattr(r, "location", "") or "").strip()
+        label = f"**{title}**"
+        if company:
+            label += f" at {company}"
+        if location:
+            label += f" • {location}"
         link = (getattr(r, "link", "") or "").strip()
-        out.append(f"{i}. [{label}]({link}) — **Apply**")
-    return "\n".join(out)
+        out.append(f"{i}. {label}  \n   🔗 [View & Apply]({link})")
+    return "\n\n".join(out)
 
 def any_match(df_: pd.DataFrame, cols: List[str], pattern: str, regex=True, flags=re.I):
     mask = None
@@ -255,9 +194,7 @@ def any_match(df_: pd.DataFrame, cols: List[str], pattern: str, regex=True, flag
         if c not in df_.columns: continue
         m = df_[c].fillna("").str.contains(pattern, regex=regex, flags=flags, na=False)
         mask = m if mask is None else (mask | m)
-    if mask is None:
-        return pd.Series([False] * len(df_), index=df_.index)
-    return mask
+    return mask if mask is not None else pd.Series([False] * len(df_), index=df_.index)
 
 # ---------- Input ----------
 user_msg = st.chat_input("Type your question…")
@@ -271,65 +208,101 @@ render_msg("user", user_msg)
 
 # ---------- Routing ----------
 filters = parse_query_to_filter(user_msg)
-intent  = classify_intent(user_msg)
-txt_lo  = user_msg.lower()
+intent = classify_intent(user_msg)
+txt_lo = user_msg.lower()
 
 has_intern_kw = "intern" in txt_lo
 has_smalltalk = is_smalltalk(txt_lo)
-has_filters   = nontrivial_filters(filters) > 0
+has_filters = nontrivial_filters(filters) > 0
 
-# Debug chip
-st.sidebar.caption(f"Intent: {intent} | intern_kw={has_intern_kw} | smalltalk={has_smalltalk} | filters={has_filters}")
+st.sidebar.caption(f"🔍 Intent: {intent} | Filters: {has_filters}")
 
 if mode == "General chat":
     route = "general"
 elif mode == "Internships":
     route = "internships"
 else:
-    # AUTO:
-    if has_smalltalk and intent != "internship_search" and not has_intern_kw:
+    if has_smalltalk and not has_intern_kw and intent != "internship_search":
         route = "general"
-    elif intent == "internship_search":
-        route = "internships"
-    elif has_intern_kw or has_filters:
+    elif intent == "internship_search" or has_intern_kw or has_filters:
         route = "internships"
     else:
         route = "general"
 
 # ---------- GENERAL CHAT ----------
 if route == "general":
-    ph = render_typing("assistant")
-    reply = llm_general_reply(user_msg)
-    ph.markdown("")  
+    with st.spinner("Thinking..."):
+        reply = llm_general_reply(user_msg)
     render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
 
 # ---------- INTERNSHIP SEARCH ----------
-need_refresh = cache_age_hours() > 6 or any(w in txt_lo for w in ["refresh", "reload", "latest", "new"])
+need_refresh = cache_age_hours() > 6 or any(w in txt_lo for w in ["refresh", "reload", "latest"])
 df = load_cached_df()
-if df.empty or need_refresh or ("details" not in df.columns):
+
+if df.empty or need_refresh:
     if need_refresh:
-        fetch_csusb_df.clear()  # force re-scrape on user request
-    with st.spinner("Fetching internships from the CSUSB CSE Internships & Careers page…"):
-        df = fetch_csusb_df(max_pages=int(os.getenv("MAX_PAGES", "80")))
+        fetch_csusb_df.clear()
+    
+    status_placeholder = st.empty()
+    progress_bar = st.progress(0)
+    
+    with status_placeholder:
+        st.info(f"🔍 {'Deep-scraping' if deep_mode else 'Fetching'} internships from CSUSB CSE page...")
+    
+    progress_bar.progress(10)
+    df = fetch_csusb_df(max_pages=max_pages, deep=deep_mode)
+    progress_bar.progress(100)
+    
+    status_placeholder.empty()
+    progress_bar.empty()
 
 table = df.copy()
 
-# Apply filters unless “show all”
+# Apply filters
+# Apply filters
 if not filters.get("show_all"):
-    # Company
     comp = (filters.get("company_name") or "").strip()
     if comp:
+        # First, try to find in existing data
         pat = "(" + "|".join(map(re.escape, [comp] + ([p for p in comp.split() if len(p) > 2] if " " in comp else []))) + ")"
-        mask = any_match(table, ["company","title","details","host"], pat, regex=True, flags=re.I)
-        table = table[mask]
-        if len(table) == 0:
-            fb = quick_company_links_playwright(comp)
-            if isinstance(fb, pd.DataFrame) and len(fb) > 0:
-                table = fb
-
-    # Role/title
+        mask = any_match(table, ["company","title","details","host"], pat, regex=True)
+        initial_matches = table[mask]
+        
+        if len(initial_matches) > 0:
+            # Found in CSUSB data
+            table = initial_matches
+            st.sidebar.caption(f"✓ Found {len(table)} in cached data")
+        else:
+            # Not found - do company-specific deep search
+            st.sidebar.caption(f"⚠️ Not in cache, searching {comp} directly...")
+            
+            with st.spinner(f"🔍 Searching {comp} career pages (this may take 30-60 seconds)..."):
+                progress = st.progress(0)
+                status = st.empty()
+                
+                status.info(f"Step 1/3: Looking for {comp} on CSUSB page...")
+                progress.progress(20)
+                
+                fb = quick_company_links_playwright(comp, deep=deep_mode)
+                
+                if isinstance(fb, pd.DataFrame) and len(fb) > 0:
+                    status.success(f"Step 3/3: Found {len(fb)} internships!")
+                    progress.progress(100)
+                    time.sleep(0.5)
+                    status.empty()
+                    progress.empty()
+                    table = fb
+                else:
+                    status.warning(f"Could not find internships for {comp}")
+                    progress.progress(100)
+                    time.sleep(1)
+                    status.empty()
+                    progress.empty()
+                    table = pd.DataFrame()  # Empty result
+                    
+                # Role/title keywords
     title_tokens = [t for t in (filters.get("title_keywords") or []) if str(t).strip()]
     if title_tokens:
         strict = bool(re.search(r"\b(only|strict|exact)\b", user_msg, re.I))
@@ -345,36 +318,55 @@ if not filters.get("show_all"):
             for t in title_tokens:
                 alts += SYN.get(t.lower(), [t])
             pat = r"(" + "|".join(map(re.escape, sorted(set(alts)))) + r")"
-            table = table[any_match(table, ["title","details"], pat, regex=True, flags=re.I)]
+            table = table[any_match(table, ["title","details"], pat, regex=True)]
         else:
             pat = r"(" + "|".join(map(re.escape, title_tokens)) + r")"
-            table = table[any_match(table, ["title","details"], pat, regex=True, flags=re.I)]
+            table = table[any_match(table, ["title","details"], pat, regex=True)]
 
     # Skills
     for s in (filters.get("skills") or []):
         s = str(s).strip()
         if s:
-            table = table[any_match(table, ["title","details"], re.escape(s), regex=True, flags=re.I)]
+            table = table[any_match(table, ["title","details"], re.escape(s), regex=True)]
 
-    # Remote / location / misc
+            # right before the location loop in app.py
+explicit_loc = bool(re.search(r"\b(remote|onsite|hybrid|usa|united states|[A-Z]{2}|\d{5})\b", user_msg, re.I))
+# add common city/state patterns as needed
+
+for k in ("city","state","country","zipcode"):
+    v = (filters.get(k) or "").strip()
+    if v and explicit_loc:
+        table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True)]
+    else:
+        # prevent it from showing up in the header
+        filters[k] = ""
+
+
+    # Remote / location
     if filters.get("remote_type"):
         rt = filters["remote_type"]
         cols = ["remote"] if "remote" in table.columns else ["details"]
-        table = table[any_match(table, cols, re.escape(rt), regex=True, flags=re.I)]
-    for k in ("city","state","country","zipcode"):
-        v = (filters.get(k) or "").strip()
-        if v:
-            table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True, flags=re.I)]
+        table = table[any_match(table, cols, re.escape(rt), regex=True)]
+    
+    # Apply location only if LLM returned it (which should mean the user typed it)
+for k in ("city","state","country","zipcode"):
+    v = (filters.get(k) or "").strip()
+    if v:
+        table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True, flags=re.I)]
+
+    
     if filters.get("education_level"):
-        table = table[any_match(table, ["details"], re.escape(str(filters["education_level"])), regex=True)]
+        table = table[any_match(table, ["details","education"], re.escape(str(filters["education_level"])), regex=True)]
+    
     if filters.get("experience_level"):
         table = table[any_match(table, ["details"], re.escape(str(filters["experience_level"])), regex=True)]
+    
     if filters.get("salary_min") and "salary" in table.columns:
         try:
             minv = int(str(filters["salary_min"]).replace("$","").replace(",",""))
             amt = table["salary"].fillna("").str.replace(",","").str.extract(r"(\d+)")[0].astype(float)
             table = table[amt >= minv]
-        except Exception:
+        except:
             pass
 
 # Ensure columns exist
@@ -384,20 +376,63 @@ for c in cols:
         table[c] = None
 
 desc = describe_filters(filters)
-if len(table) == 0:
-    header = f"Sorry, I couldn’t find any internships on the CSUSB page" + (f" for **{desc}**." if desc else ".")
-else:
-    header = f"Here are **{len(table)}** internships from the CSUSB page" + (f" for **{desc}**." if desc else ".")
 
-answer_md = header + "\n\n" + links_md(table)
+# Generate response
+if len(table) == 0:
+    header = f"😔 Sorry, I couldn't find any internships" + (f" for **{desc}**" if desc else "") + " on the CSUSB page."
+    if deep_mode:
+        header += "\n\n💡 **Tip**: Try a broader search or check if the company name is spelled correctly."
+    answer_md = header
+else:
+    header = f"🎉 Found **{len(table)}** internship" + ("s" if len(table) > 1 else "")
+    if desc:
+        header += f" for {desc}"
+    header += "!"
+    
+    if deep_mode:
+        header += "\n\n✨ *Results include deep-scraped data from company career pages*"
+    
+    answer_md = header + "\n\n" + links_md(table)
 
 render_msg("assistant", answer_md)
+
+# Show detailed table
 if not table.empty:
+    st.markdown("### 📊 Detailed Results")
+    
+    # Add metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Internships", len(table))
+    with col2:
+        unique_companies = table["company"].dropna().nunique()
+        st.metric("Companies", unique_companies)
+    with col3:
+        remote_count = table[table["remote"].fillna("").str.contains("remote", case=False, na=False)].shape[0] if "remote" in table.columns else 0
+        st.metric("Remote Positions", remote_count)
+    
+    # Display table
+    display_cols = [c for c in cols if c in table.columns and table[c].notna().any()]
     st.dataframe(
-        table[cols],
-        use_container_width=True,
+    table[display_cols],
+    width='stretch',
         hide_index=True,
-        column_config={"link": st.column_config.LinkColumn("link", help="Open posting")},
+        column_config={
+            "link": st.column_config.LinkColumn("Apply Link", help="Click to open posting"),
+            "title": st.column_config.TextColumn("Title", width="medium"),
+            "company": st.column_config.TextColumn("Company", width="medium"),
+            "location": st.column_config.TextColumn("Location", width="small"),
+            "posted_date": st.column_config.DateColumn("Posted", width="small"),
+        },
+    )
+    
+    # Download option
+    csv = table.to_csv(index=False)
+    st.download_button(
+        label="📥 Download Results (CSV)",
+        data=csv,
+        file_name=f"csusb_internships_{time.strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
     )
 
 st.session_state.messages.append({"role": "assistant", "content": answer_md})
