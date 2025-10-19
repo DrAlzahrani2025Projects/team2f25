@@ -13,6 +13,13 @@ fi
 # Start Ollama in the background if available (inside container)
 if command -v ollama >/dev/null 2>&1; then
   (ollama serve >/tmp/ollama.log 2>&1 &) || true
+  sleep 2
+  
+  if curl -s "${OLLAMA_HOST}/api/tags" >/dev/null 2>&1; then
+    if ! curl -s "${OLLAMA_HOST}/api/tags" | grep -q "\"name\":\"${MODEL_NAME}\""; then
+      ollama pull "${MODEL_NAME}" || true
+    fi
+  fi
 fi
 
 exec streamlit run app.py \
