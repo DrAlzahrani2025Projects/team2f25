@@ -82,15 +82,6 @@ def fetch_csusb_df(max_pages: int = 80, deep: bool = True) -> pd.DataFrame:
     df.to_parquet(PARQUET_PATH, index=False)
     return df
 
-# ---------- Small talk patterns ----------
-SMALLTALK_PATTERNS = re.compile(
-    r"\b(hi|hello|hey|yo|sup|what'?s up|how are you|"
-    r"your name|who are you|thanks|thank you|joke|help)\b", re.I
-)
-
-def is_smalltalk(txt: str) -> bool:
-    return bool(SMALLTALK_PATTERNS.search(txt))
-
 # ---------- Conversational memory ----------
 if "messages" not in st.session_state:
     st.session_state.messages = [{
@@ -100,7 +91,7 @@ if "messages" not in st.session_state:
 
 # --- Message renderer ---
 def render_msg(role: str, content: str):
-    with st.chat_message(role, avatar="👤" if role == "user" else "🤖"):
+    with st.chat_message(role, avatar="🧑" if role == "user" else "🤖"):
         st.markdown(content)
 
 # --- Render history ---
@@ -111,45 +102,45 @@ def history_text(last_n: int = 8) -> str:
     msgs = st.session_state.messages[-last_n:]
     return "\n".join([f"{'User' if m['role']=='user' else 'Assistant'}: {m['content']}" for m in msgs])
 
-# ---------- Small-talk replies ----------
-def quick_smalltalk_reply(txt: str) -> str | None:
-    s = txt.strip().lower()
-    if re.search(r"\b(hi|hello|hey)\b", s):
-        return "Hey! Ready to find some internships? 🚀"
-    if "how are you" in s:
-        return "I'm doing great! How can I help you today?"
-    if "your name" in s or "who are you" in s:
-        return "I'm your CSUSB Internship Finder – powered by AI!"
-    if "thanks" in s or "thank you" in s:
-        return "You're welcome! 😊"
-    if "joke" in s:
-        return "Why did the intern bring a ladder? To reach new career heights! 😄"
-    if "help" in s:
-        return "I can search CSUSB internships and deep-scrape company sites. Try: **google internships**"
-    return None
-
-# ---------- General chat with LLM ----------
+# ---------- LLM general reply ----------
 def llm_general_reply(user_text: str) -> str:
-    quick = quick_smalltalk_reply(user_text)
-    if quick:
-        return quick
+    """
+    Call Ollama LLM for all general chat (including small talk).
+    No hardcoded responses - let the LLM handle everything.
+    """
     try:
         from langchain_ollama import ChatOllama
-        from langchain.prompts import ChatPromptTemplate
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+        
         llm = ChatOllama(
-            base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
-            model=os.getenv("MODEL_NAME", "qwen2.5:0.5b"),
-            temperature=0.3, streaming=False,
+            base_url=ollama_host,
+            model=model_name,
+            temperature=0.3,
+            streaming=False,
             model_kwargs={"num_ctx": 1536, "num_predict": 180}
         )
-        sys = "You are a helpful assistant for CSUSB internship search. Keep replies concise and encouraging."
+        
+        sys = "You are a helpful and friendly assistant for CSUSB internship search. Keep replies concise and encouraging. You can engage in small talk, answer questions, or help with internship searches."
         prompt = ChatPromptTemplate.from_messages([
             ("system", sys),
             ("human", "History:\n{history}\n\nUser: {q}")
         ])
-        return (prompt | llm).invoke({"history": history_text(), "q": user_text}).content.strip()
-    except:
-        return "I'm here to help! What would you like to know? 💡"
+        
+        chain = prompt | llm
+        response = chain.invoke({"history": history_text(), "q": user_text})
+        return response.content.strip()
+        
+    except ImportError as e:
+        st.error(f"Import Error: {str(e)}")
+        print(f"Import Error in llm_general_reply: {e}")
+        return "I'm here to help! What would you like to know?"
+    except Exception as e:
+        st.error(f"LLM Error: {str(e)}")
+        print(f"Error in llm_general_reply: {e}")
+        return "I'm here to help! What would you like to know?"
 
 # ---------- Utility helpers ----------
 def nontrivial_filters(f: dict) -> int:
@@ -212,7 +203,6 @@ intent = classify_intent(user_msg)
 txt_lo = user_msg.lower()
 
 has_intern_kw = "intern" in txt_lo
-has_smalltalk = is_smalltalk(txt_lo)
 has_filters = nontrivial_filters(filters) > 0
 
 st.sidebar.caption(f"🔍 Intent: {intent} | Filters: {has_filters}")
@@ -222,9 +212,7 @@ if mode == "General chat":
 elif mode == "Internships":
     route = "internships"
 else:
-    if has_smalltalk and not has_intern_kw and intent != "internship_search":
-        route = "general"
-    elif intent == "internship_search" or has_intern_kw or has_filters:
+    if intent == "internship_search" or has_intern_kw or has_filters:
         route = "internships"
     else:
         route = "general"
@@ -249,7 +237,7 @@ if df.empty or need_refresh:
     progress_bar = st.progress(0)
     
     with status_placeholder:
-        st.info(f"🔍 {'Deep-scraping' if deep_mode else 'Fetching'} internships from CSUSB CSE page...")
+        st.info(f"🔄 {'Deep-scraping' if deep_mode else 'Fetching'} internships from CSUSB CSE page...")
     
     progress_bar.progress(10)
     df = fetch_csusb_df(max_pages=max_pages, deep=deep_mode)
@@ -260,7 +248,6 @@ if df.empty or need_refresh:
 
 table = df.copy()
 
-# Apply filters
 # Apply filters
 if not filters.get("show_all"):
     comp = (filters.get("company_name") or "").strip()
@@ -301,8 +288,8 @@ if not filters.get("show_all"):
                     status.empty()
                     progress.empty()
                     table = pd.DataFrame()  # Empty result
-                    
-                # Role/title keywords
+
+    # Role/title keywords
     title_tokens = [t for t in (filters.get("title_keywords") or []) if str(t).strip()]
     if title_tokens:
         strict = bool(re.search(r"\b(only|strict|exact)\b", user_msg, re.I))
@@ -329,18 +316,15 @@ if not filters.get("show_all"):
         if s:
             table = table[any_match(table, ["title","details"], re.escape(s), regex=True)]
 
-            # right before the location loop in app.py
-explicit_loc = bool(re.search(r"\b(remote|onsite|hybrid|usa|united states|[A-Z]{2}|\d{5})\b", user_msg, re.I))
-# add common city/state patterns as needed
-
-for k in ("city","state","country","zipcode"):
-    v = (filters.get(k) or "").strip()
-    if v and explicit_loc:
-        table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True)]
-    else:
-        # prevent it from showing up in the header
-        filters[k] = ""
-
+    # Location filtering
+    explicit_loc = bool(re.search(r"\b(remote|onsite|hybrid|usa|united states|[A-Z]{2}|\d{5})\b", user_msg, re.I))
+    for k in ("city","state","country","zipcode"):
+        v = (filters.get(k) or "").strip()
+        if v and explicit_loc:
+            table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True)]
+        else:
+            # prevent it from showing up in the header
+            filters[k] = ""
 
     # Remote / location
     if filters.get("remote_type"):
@@ -349,12 +333,11 @@ for k in ("city","state","country","zipcode"):
         table = table[any_match(table, cols, re.escape(rt), regex=True)]
     
     # Apply location only if LLM returned it (which should mean the user typed it)
-for k in ("city","state","country","zipcode"):
-    v = (filters.get(k) or "").strip()
-    if v:
-        table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True, flags=re.I)]
+    for k in ("city","state","country","zipcode"):
+        v = (filters.get(k) or "").strip()
+        if v:
+            table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True, flags=re.I)]
 
-    
     if filters.get("education_level"):
         table = table[any_match(table, ["details","education"], re.escape(str(filters["education_level"])), regex=True)]
     
@@ -414,8 +397,8 @@ if not table.empty:
     # Display table
     display_cols = [c for c in cols if c in table.columns and table[c].notna().any()]
     st.dataframe(
-    table[display_cols],
-    width='stretch',
+        table[display_cols],
+        width='stretch',
         hide_index=True,
         column_config={
             "link": st.column_config.LinkColumn("Apply Link", help="Click to open posting"),
