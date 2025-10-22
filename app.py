@@ -228,103 +228,121 @@ with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
             st.session_state.resume_data = data
         st.success('Résumé saved. Ask “show experience”, “list my skills”, or “what’s my LinkedIn?”.')
 
-# import streamlit.components.v1 as components
+
+
+import streamlit.components.v1 as components
+
 components.html("""
 <script>
 (() => {
   const doc = parent.document;
 
-  // helpers
+  // Helpers
   const $  = (sel, root=doc) => root.querySelector(sel);
   const $$ = (sel, root=doc) => Array.from(root.querySelectorAll(sel));
 
-  function getChat() { return $('[data-testid="stChatInput"]'); }
-
-  function choosePopover() {
-    // Pick the popover whose BUTTON is closest to the bottom-left of the chat input.
-    const chat = getChat(); if (!chat) return null;
-    const rc = chat.getBoundingClientRect();
-
-    const candidates = $$('[data-testid="stPopover"]').map(p => {
-      const b = p.querySelector('[data-testid="stPopoverButton"] button, [data-testid="stPopoverButton"], button');
-      if (!b) return null;
-      const r = b.getBoundingClientRect();
-      // distance to bottom-left of chat input
-      const score = Math.hypot(r.left - rc.left, (window.innerHeight - r.bottom));
-      return { p, b, score };
-    }).filter(Boolean);
-
-    candidates.sort((a,b) => a.score - b.score);
-    return candidates.length ? candidates[0].p : null;
+  function getRealPopoverButton() {
+    // the real Streamlit/BaseWeb popover trigger
+    return $('[data-testid="stPopoverButton"] button') ||
+           $('[data-testid="stPopoverButton"]');
   }
 
-  function moveAnchorIntoInput() {
-    const chat = getChat(); if (!chat) return;
-    const pop  = choosePopover(); if (!pop) return;
+  function ensureProxyPlus() {
+    const chat = $('[data-testid="stChatInput"]');
+    if (!chat) return null;
 
-    if (!chat.contains(pop)) chat.appendChild(pop);
+    // Create once
+    let proxy = chat.querySelector('#plus-proxy');
+    if (!proxy) {
+      proxy = doc.createElement('button');
+      proxy.id = 'plus-proxy';
+      proxy.type = 'button';
+      proxy.setAttribute('aria-label','Add attachments');
+      proxy.textContent = '+';
+      chat.appendChild(proxy);
 
-    Object.assign(pop.style, {
-      position: 'absolute',
-      left: '8px',
-      top: '50%',
-      transform: 'translateY(-50%)',
-      display: 'inline-flex',
-      width: '40px',         // keep the anchor small
-      overflow: 'hidden',    // hide any inline chip/label
-      background: 'transparent',
-      border: '0',
-      boxShadow: 'none',
-      margin: '0',
-      zIndex: '2100'
-    });
+      proxy.addEventListener('click', () => {
+        const real = getRealPopoverButton();
+        if (real) {
+          real.click();                 // open the real popover
+          setTimeout(positionPanel, 30);
+        }
+      });
+    }
+    return proxy;
   }
 
-  function placePanel() {
-    const btn = $('[data-testid="stChatInput"] [data-testid="stPopoverButton"] button, [data-testid="stChatInput"] [data-testid="stPopoverButton"]');
-    if (!btn) return;
-
-    // BaseWeb popover content lives in a portal
-    const panel = (()=>{
-      const a = $$('[data-baseweb="popover"]');
-      return a.length ? a[a.length-1] : null;
-    })();
-    if (!panel) return;
-
-    const r = btn.getBoundingClientRect();
-    const h = panel.offsetHeight || 260;
-    let top = r.top - h - 10;
-    if (top < 16) top = Math.min(r.bottom + 10, window.innerHeight - h - 16);
-
-    Object.assign(panel.style, {
+  // Hide the real anchor so it doesn't occupy layout anywhere
+  function hideRealAnchor() {
+    const anchor = $('[data-testid="stPopover"]');
+    if (!anchor) return;
+    Object.assign(anchor.style, {
       position: 'fixed',
-      left: r.left + 'px',
-      top: top + 'px',
-      right: 'auto',
-      bottom: 'auto',
-      transform: 'none',
-      zIndex: '4000'
+      left: '-10000px',
+      top: '0',
+      width: '0',
+      height: '0',
+      opacity: '0',
+      pointerEvents: 'none'
     });
   }
+
+  function getPanel() {
+    // BaseWeb renders the panel in a portal
+    const panels = $$('[data-baseweb="popover"]');
+    return panels.length ? panels[panels.length - 1] : null;
+  }
+
+  function positionPanel() {
+  const proxy = ensureProxyPlus();
+  const panel = getPanel();
+  if (!proxy || !panel) return;
+
+  const r = proxy.getBoundingClientRect();
+  const h = panel.offsetHeight || 260;
+  const w = panel.offsetWidth || 340;
+
+  // Prefer above the +; if not enough room, place below
+  let top = r.top - h - 10;
+  if (top < 16) top = Math.min(r.bottom + 10, window.innerHeight - h - 16);
+
+  // Clamp horizontally so the panel stays on-screen
+  let left = r.left;
+  left = Math.max(16, Math.min(left, window.innerWidth - w - 16));
+
+  Object.assign(panel.style, {
+    position: 'fixed',
+    left: left + 'px',
+    top:  top + 'px',
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+    zIndex: '4000',
+    maxWidth: 'min(420px, calc(100vw - 32px))'
+  });
+}
+
 
   function sync() {
-    moveAnchorIntoInput();
-    placePanel();
+    ensureProxyPlus();
+    hideRealAnchor();
+    positionPanel();
   }
 
+  // Run and keep in sync with Streamlit re-renders
   window.addEventListener('load', sync, { once: true });
   sync();
   new MutationObserver(sync).observe(parent.document.body, { childList: true, subtree: true });
-  addEventListener('resize', sync, { passive: true });
-  // After a click on the +, reposition once the panel mounts
+  addEventListener('resize', positionPanel, { passive: true });
+  // Reposition as soon as the panel opens
   doc.addEventListener('click', (e) => {
-    if (e.target.closest('[data-testid="stPopoverButton"]')) {
-      setTimeout(placePanel, 0);
-    }
+    if (e.target.closest('#plus-proxy')) setTimeout(positionPanel, 0);
   }, true);
 })();
 </script>
 """, height=0)
+
+
 # ---- Only stop if no input AFTER rendering the + button ----
 if not user_msg:
     st.stop()

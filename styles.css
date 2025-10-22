@@ -224,67 +224,42 @@ h1 { letter-spacing:.2px; }
 }
 
 /* === Center the chat input and keep it narrow === */
-:root { --composer-max: 720px; } /* adjust to taste */
 
-[data-testid="stChatInput"]{
-  position: fixed !important;         /* ignore parent layout */
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  bottom: 16px !important;
-  width: min(var(--composer-max), calc(100% - 48px)) !important; /* 24px gutters */
-  margin: 0 auto !important;
-}
 
-/* Constrain the inner wrapper too */
-[data-testid="stChatInput"] > div{
-  max-width: var(--composer-max) !important;
-  margin: 0 auto !important;
-}
 
-/* Ensure content doesn't hide under the fixed input */
-[data-testid="stAppViewContainer"] > .main{
-  padding-bottom: 132px !important;
-}
 
-:root { --composer-max: 720px; }
+/* === Lock chat composer size/position (always small + centered) === */
+:root { --composer-max: 680px; }
 
-/* Center the chat input and make it narrow */
-[data-testid="stChatInput"]{
+div[data-testid="stChatInput"] {
   position: fixed !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
   bottom: 16px !important;
-  width: min(var(--composer-max), calc(100% - 48px)) !important;
+  z-index: 1000 !important;
+
+  width: var(--composer-max) !important;
+  max-width: calc(100% - 48px) !important;
+
   margin: 0 auto !important;
+  background: #fff !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05) !important;
 }
 
-/* Popover wrapper lives INSIDE the input, as a small anchor on the left */
-[data-testid="stChatInput"] [data-testid="stPopover"]{
-  position: absolute !important;
-  left: 8px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  display: inline-flex !important;
-  width: auto !important;
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  z-index: 2100 !important;
-}
+/* Make inner input respect the fixed width */
+div[data-testid="stChatInput"] > div { width: 100% !important; }
 
-/* Size the + button */
-[data-testid="stChatInput"] [data-testid="stPopoverButton"] > button{
-  width: 40px !important;
-  height: 40px !important;
-  min-width: 40px !important;
-  min-height: 40px !important;
-  padding: 0 !important;
-  border-radius: 9999px !important;
-}
+/* Keep page content above the fixed composer */
+[data-testid="stAppViewContainer"] > .main { padding-bottom: 140px !important; }
 
-/* Make room for the button so text doesn't overlap */
+/* Left “+” proxy spacing so text doesn’t overlap */
 [data-testid="stChatInput"] textarea,
 [data-testid="stChatInput"] input,
 [data-testid="stChatInput"] [contenteditable="true"]{
   padding-left: 56px !important;
 }
+
+
+
