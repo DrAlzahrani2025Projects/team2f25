@@ -1,4 +1,3 @@
-
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,7 +27,7 @@ RUN mkdir -p .streamlit && \
     echo 'textColor="#111827"' >> .streamlit/config.toml && \
     echo 'font="sans serif"' >> .streamlit/config.toml
 
-# Create default styles.css
+# Create placeholder styles.css (will be overridden by COPY below)
 RUN echo '/* Default styles */' > styles.css && \
     echo '.stApp { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }' >> styles.css
 
@@ -41,9 +40,15 @@ RUN python -m pip install --upgrade pip && \
 RUN playwright install chromium && \
     playwright install-deps chromium
 
-# Copy application files
-COPY app.py scraper.py query_to_filter.py entrypoint.sh ./
-RUN chmod +x /app/entrypoint.sh && mkdir -p /app/data
+    
+
+# Copy application files  ⬅️  include resume_manager.py and your real styles.css
+COPY app.py main.py scraper.py query_to_filter.py resume_manager.py resume_parser.py entrypoint.sh ./
+COPY styles.css ./
+RUN apt-get update && apt-get install -y --no-install-recommends dos2unix && \
+    dos2unix /app/*.sh && \
+    chmod +x /app/entrypoint.sh && \
+    rm -rf /var/lib/apt/lists/*
 
 # Environment variables
 ENV MODEL_NAME=qwen2.5:0.5b \

@@ -179,7 +179,6 @@ h1 { letter-spacing:.2px; }
   border-color:#bfdbfe;
 }
 
-/* role chip: compact + uppercase */
 .role-chip{
   font-size: 10px; letter-spacing:.08em; opacity:.85;
   padding: 2px 8px; border-radius: 999px;
@@ -200,7 +199,7 @@ h1 { letter-spacing:.2px; }
 }
 
 .stChatMessage:has(.role-chip.user) [data-testid="stChatMessageContent"]{
-  background:var(--user-bubble);
+  background: var(--user-bubble);
   border-color:#bfdbfe;
   box-shadow:0 2px 6px rgba(37,99,235,.08);
 }
@@ -216,3 +215,95 @@ h1 { letter-spacing:.2px; }
   background:#ffffff;
   box-shadow:0 1px 3px rgba(0,0,0,.05);
 }
+
+#resume-fab [data-testid="stPopoverButton"] > button{
+  width:46px; height:46px; border-radius:999px;
+  background: linear-gradient(180deg,#3b82f6,#2563eb) !important;
+  color:#fff !important; font-weight:700; font-size:22px; border:0;
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+}
+
+/* === Center the chat input and keep it narrow === */
+:root { --composer-max: 720px; } /* adjust to taste */
+
+[data-testid="stChatInput"]{
+  position: fixed !important;         /* ignore parent layout */
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  bottom: 16px !important;
+  width: min(var(--composer-max), calc(100% - 48px)) !important; /* 24px gutters */
+  margin: 0 auto !important;
+}
+
+/* Constrain the inner wrapper too */
+[data-testid="stChatInput"] > div{
+  max-width: var(--composer-max) !important;
+  margin: 0 auto !important;
+}
+
+/* Ensure content doesn't hide under the fixed input */
+[data-testid="stAppViewContainer"] > .main{
+  padding-bottom: 132px !important;
+}
+
+:root { --composer-max: 720px; }
+[data-testid="stChatInput"]{
+  position: fixed !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  bottom: 16px !important;
+  width: min(var(--composer-max), calc(100% - 48px)) !important;
+  margin: 0 auto !important;
+}
+
+/* --- Make the popover wrapper invisible so it never becomes a bar --- */
+[data-testid="stPopover"]{
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  display: contents !important;   /* wrapper doesn't affect layout */
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* --- Place the ➕ INSIDE the chat input, small and on the left --- */
+[data-testid="stChatInput"] [data-testid="stPopoverButton"]{
+  position: absolute !important;
+  left: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+
+  /* stop it from stretching full width */
+  display: inline-flex !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  z-index: 2100 !important;
+}
+
+/* The actual clickable button inside the wrapper */
+[data-testid="stChatInput"] [data-testid="stPopoverButton"] > button{
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;  /* circle */
+  box-shadow: none !important;
+}
+
+/* --- Give the typing area room so it doesn't overlap the button --- */
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] input,
+[data-testid="stChatInput"] [contenteditable="true"]{
+  padding-left: 56px !important;   /* 40px button + spacing */
+}
+
+
+
+
+
+
+
+
