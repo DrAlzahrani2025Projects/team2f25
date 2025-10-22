@@ -37,6 +37,7 @@ GREETINGS = {
     "your age","how old are you"
 }
 
+
 # ---------- LLM helper ----------
 def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str, Any]:
     """
@@ -137,13 +138,23 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
 
     return llm_data
 
-# ---------- Intent Classification ----------
+
 def classify_intent(q: str) -> str:
     """
     Prefer the LLM’s intent. Fall back to lightweight regex so the app still works
     if the LLM is unavailable. No relative imports; GREETINGS is local.
     """
     s = (q or "").lower().strip()
+
+    # --- NEW: résumé / personal-info guard -------------------------------
+    # Any query clearly about the user's résumé should be treated as general,
+    # so the app doesn't route it into the internship search flow.
+    if (
+        re.search(r"\b(resume|résumé|cv)\b", s)
+        or re.search(r"\b(skills?|experience|projects?|education|linkedin|github|email|phone|portfolio)\b", s)
+    ):
+        return "general_question"
+    # ---------------------------------------------------------------------
 
     # small-talk fast path
     if s in GREETINGS or any(g in s for g in GREETINGS):
@@ -153,7 +164,7 @@ def classify_intent(q: str) -> str:
     if USE_OLLAMA:
         d = _llm_json(
             'Return JSON exactly like {"intent":"internship_search"} or {"intent":"general_question"}. '
-            "If the user typed only a company name, treat it as internship_search.",
+            'If the user typed only a company name, treat it as internship_search.',
             s, num_ctx=512, num_predict=30, temp=0.0
         )
         if isinstance(d, dict) and d.get("intent") in {"internship_search", "general_question"}:
