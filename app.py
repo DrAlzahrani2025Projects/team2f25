@@ -32,6 +32,28 @@ PARQUET_PATH = DATA_DIR / "internships.parquet"
 # ---------- Page setup ----------
 st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
 
+# --- Ollama warm-up (once) ---
+@st.cache_resource(show_spinner=False)
+def ensure_ollama_ready():
+    """Ping local Ollama and pull the model if missing (one-time)."""
+    import os, json, urllib.request
+    host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    model = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+    try:
+        with urllib.request.urlopen(f"{host}/api/tags", timeout=2) as r:
+            data = json.loads(r.read().decode("utf-8") or "{}")
+        names = [m.get("name","") for m in (data.get("models", []) or [])]
+        if model not in names:
+            st.info(f"Pulling model `{model}`… (one-time)")
+            body = json.dumps({"name": model}).encode("utf-8")
+            req = urllib.request.Request(f"{host}/api/pull", data=body, headers={"Content-Type":"application/json"})
+            urllib.request.urlopen(req, timeout=300).read()
+    except Exception:
+        st.warning("Ollama isn’t reachable; general chat may be slow or fail.")
+
+ensure_ollama_ready()
+
+
 # --- CSS injector ---
 def inject_css(path: str = "styles.css"):
     p = Path(path)
