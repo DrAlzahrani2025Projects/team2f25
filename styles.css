@@ -247,6 +247,8 @@ h1 { letter-spacing:.2px; }
 }
 
 :root { --composer-max: 720px; }
+
+/* Center the chat input and make it narrow */
 [data-testid="stChatInput"]{
   position: fixed !important;
   left: 50% !important;
@@ -256,54 +258,33 @@ h1 { letter-spacing:.2px; }
   margin: 0 auto !important;
 }
 
-/* --- Make the popover wrapper invisible so it never becomes a bar --- */
-[data-testid="stPopover"]{
-  background: transparent !important;
-  box-shadow: none !important;
-  border: 0 !important;
-  display: contents !important;   /* wrapper doesn't affect layout */
-  width: auto !important;
-  max-width: none !important;
-  margin: 0 !important;
-}
-
-/* --- Place the ➕ INSIDE the chat input, small and on the left --- */
-[data-testid="stChatInput"] [data-testid="stPopoverButton"]{
+/* Popover wrapper lives INSIDE the input, as a small anchor on the left */
+[data-testid="stChatInput"] [data-testid="stPopover"]{
   position: absolute !important;
   left: 8px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-
-  /* stop it from stretching full width */
   display: inline-flex !important;
   width: auto !important;
-  max-width: none !important;
-  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
   z-index: 2100 !important;
 }
 
-/* The actual clickable button inside the wrapper */
+/* Size the + button */
 [data-testid="stChatInput"] [data-testid="stPopoverButton"] > button{
   width: 40px !important;
   height: 40px !important;
   min-width: 40px !important;
   min-height: 40px !important;
   padding: 0 !important;
-  border-radius: 9999px !important;  /* circle */
-  box-shadow: none !important;
+  border-radius: 9999px !important;
 }
 
-/* --- Give the typing area room so it doesn't overlap the button --- */
+/* Make room for the button so text doesn't overlap */
 [data-testid="stChatInput"] textarea,
 [data-testid="stChatInput"] input,
 [data-testid="stChatInput"] [contenteditable="true"]{
-  padding-left: 56px !important;   /* 40px button + spacing */
+  padding-left: 56px !important;
 }
-
-
-
-
-
-
-
-

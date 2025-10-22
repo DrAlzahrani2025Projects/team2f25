@@ -229,42 +229,102 @@ with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
         st.success('Résumé saved. Ask “show experience”, “list my skills”, or “what’s my LinkedIn?”.')
 
 # import streamlit.components.v1 as components
-
 components.html("""
 <script>
 (() => {
   const doc = parent.document;
 
-  function movePlusIntoChat() {
-    const chat   = doc.querySelector('[data-testid="stChatInput"]');
-    const btn    = doc.querySelector('[data-testid="stPopoverButton"]');         // the ➕ button
-    const pop    = btn ? btn.closest('[data-testid="stPopover"]') : null;       // wrapper that makes the blue bar
-    if (!chat || !btn || !pop) return;
+  // helpers
+  const $  = (sel, root=doc) => root.querySelector(sel);
+  const $$ = (sel, root=doc) => Array.from(root.querySelectorAll(sel));
 
-    // Move the ➕ button INSIDE the chat input container once
-    if (!chat.contains(btn)) {
-      chat.appendChild(btn);
-    }
+  function getChat() { return $('[data-testid="stChatInput"]'); }
 
-    // Kill the full-width bar look on the wrapper
-    pop.style.background = 'transparent';
-    pop.style.boxShadow  = 'none';
-    pop.style.border     = '0';
-    pop.style.width      = 'auto';
-    pop.style.maxWidth   = 'none';
-    pop.style.margin     = '0';
-    pop.style.position   = 'static';
-    pop.style.display    = 'contents'; // wrapper becomes invisible but functionality stays
+  function choosePopover() {
+    // Pick the popover whose BUTTON is closest to the bottom-left of the chat input.
+    const chat = getChat(); if (!chat) return null;
+    const rc = chat.getBoundingClientRect();
+
+    const candidates = $$('[data-testid="stPopover"]').map(p => {
+      const b = p.querySelector('[data-testid="stPopoverButton"] button, [data-testid="stPopoverButton"], button');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      // distance to bottom-left of chat input
+      const score = Math.hypot(r.left - rc.left, (window.innerHeight - r.bottom));
+      return { p, b, score };
+    }).filter(Boolean);
+
+    candidates.sort((a,b) => a.score - b.score);
+    return candidates.length ? candidates[0].p : null;
   }
 
-  // Run and keep it in place as Streamlit rerenders
-  movePlusIntoChat();
-  new MutationObserver(movePlusIntoChat).observe(parent.document.body, { childList:true, subtree:true });
-  addEventListener('resize', movePlusIntoChat, { passive:true });
+  function moveAnchorIntoInput() {
+    const chat = getChat(); if (!chat) return;
+    const pop  = choosePopover(); if (!pop) return;
+
+    if (!chat.contains(pop)) chat.appendChild(pop);
+
+    Object.assign(pop.style, {
+      position: 'absolute',
+      left: '8px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      display: 'inline-flex',
+      width: '40px',         // keep the anchor small
+      overflow: 'hidden',    // hide any inline chip/label
+      background: 'transparent',
+      border: '0',
+      boxShadow: 'none',
+      margin: '0',
+      zIndex: '2100'
+    });
+  }
+
+  function placePanel() {
+    const btn = $('[data-testid="stChatInput"] [data-testid="stPopoverButton"] button, [data-testid="stChatInput"] [data-testid="stPopoverButton"]');
+    if (!btn) return;
+
+    // BaseWeb popover content lives in a portal
+    const panel = (()=>{
+      const a = $$('[data-baseweb="popover"]');
+      return a.length ? a[a.length-1] : null;
+    })();
+    if (!panel) return;
+
+    const r = btn.getBoundingClientRect();
+    const h = panel.offsetHeight || 260;
+    let top = r.top - h - 10;
+    if (top < 16) top = Math.min(r.bottom + 10, window.innerHeight - h - 16);
+
+    Object.assign(panel.style, {
+      position: 'fixed',
+      left: r.left + 'px',
+      top: top + 'px',
+      right: 'auto',
+      bottom: 'auto',
+      transform: 'none',
+      zIndex: '4000'
+    });
+  }
+
+  function sync() {
+    moveAnchorIntoInput();
+    placePanel();
+  }
+
+  window.addEventListener('load', sync, { once: true });
+  sync();
+  new MutationObserver(sync).observe(parent.document.body, { childList: true, subtree: true });
+  addEventListener('resize', sync, { passive: true });
+  // After a click on the +, reposition once the panel mounts
+  doc.addEventListener('click', (e) => {
+    if (e.target.closest('[data-testid="stPopoverButton"]')) {
+      setTimeout(placePanel, 0);
+    }
+  }, true);
 })();
 </script>
 """, height=0)
-
 # ---- Only stop if no input AFTER rendering the + button ----
 if not user_msg:
     st.stop()
