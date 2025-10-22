@@ -72,6 +72,12 @@ st.caption(
     "Try: **nasa internships**, **google remote intern**, **only java developer**, **show all internships**"
 )
 
+_flash = st.session_state.get("resume_flash")
+if _flash:
+    st.success(_flash)
+    st.session_state["resume_flash"] = ""
+
+
 # --- Mode toggle ---
 mode = st.sidebar.radio("Mode", ["Auto", "General chat", "Internships"], index=0)
 deep_mode = st.sidebar.checkbox("Deep Search", value=False, help="⚠️ Slow: Scrapes company career pages for detailed postings (recommended: OFF for first try)")
@@ -238,9 +244,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# === NEW: résumé state + auto-load from disk ===
+st.session_state.setdefault("resume_text", "")
+st.session_state.setdefault("resume_data", {})
+
+# NEW: fresh uploader instance + cross-rerun flash message
+st.session_state.setdefault("resume_uploader_key", "resume_uploader_0")
+st.session_state.setdefault("resume_flash", "")
+
+
 with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
     st.write("Upload a résumé file. Extraction runs automatically.")
-    up = st.file_uploader("Upload résumé", type=["pdf","docx","txt"], label_visibility="collapsed")
+    up = st.file_uploader(
+        "Upload résumé",
+        type=["pdf", "docx", "txt"],
+        label_visibility="collapsed",
+        key=st.session_state["resume_uploader_key"],  # <- dynamic key
+    )
     if up is not None:
         with st.spinner("Extracting résumé…"):
             text = extract_resume_text(up)
@@ -248,11 +268,15 @@ with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
             save_resume(data, text)
             st.session_state.resume_text = text
             st.session_state.resume_data = data
-        st.success('Résumé saved. Ask “show experience”, “list my skills”, or “what’s my LinkedIn?”.')
 
+        # Show success *after* rerender in main page
+        st.session_state["resume_flash"] = "Résumé saved. You can upload another anytime via ➕."
 
+        # Reset uploader so it’s empty on the next render, then refresh
+        import time as _t
+        st.session_state["resume_uploader_key"] = f"resume_uploader_{int(_t.time()*1000)}"
+        st.rerun()
 
-import streamlit.components.v1 as components
 
 components.html("""
 <script>
@@ -264,10 +288,13 @@ components.html("""
   const $$ = (sel, root=doc) => Array.from(root.querySelectorAll(sel));
 
   function getRealPopoverButton() {
-    // the real Streamlit/BaseWeb popover trigger
-    return $('[data-testid="stPopoverButton"] button') ||
-           $('[data-testid="stPopoverButton"]');
-  }
+  // pick the NEWEST popover trigger after a rerender
+  const btns = $$('[data-testid="stPopoverButton"] button');
+  if (btns.length) return btns[btns.length - 1];
+  const wraps = $$('[data-testid="stPopoverButton"]');
+  return wraps.length ? wraps[wraps.length - 1] : null;
+}
+
 
   function ensureProxyPlus() {
     const chat = $('[data-testid="stChatInput"]');
@@ -366,8 +393,8 @@ components.html("""
 
 
 # ---- Only stop if no input AFTER rendering the + button ----
-if not user_msg:
-    st.stop()
+
+
 if not user_msg:
     st.stop()
 if not allow_query():
