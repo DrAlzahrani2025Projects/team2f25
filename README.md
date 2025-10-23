@@ -12,7 +12,7 @@ Jupyter Notebook (for documentation and demos)
 Install Jupyter
 ---
 
-### Step 1: Remove the existing code directory completely
+### Step 1: Remove the existing code directory completely:
 
 Because the local repository can't been updated correctly, need to remove the directory first.
 
@@ -20,7 +20,7 @@ Because the local repository can't been updated correctly, need to remove the di
 rm -rf team2f25
 ```
 
-### Step 2: Clone the Repository
+### Step 2: Clone the Repository:
 
 Clone the GitHub repository to your local machine:
 
@@ -28,7 +28,7 @@ Clone the GitHub repository to your local machine:
 git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
-### Step 3: Navigate to the Repository
+### Step 3: Navigate to the Repository:
 
 Change to the cloned repository directory:
 
@@ -36,7 +36,7 @@ Change to the cloned repository directory:
 cd team2f25
 ```
 
-### Step 4: Pull the Latest Version
+### Step 4: Pull the Latest Version:
 
 Update the repository to the latest version:
 
@@ -50,7 +50,6 @@ git pull origin main
 Run the setup script to build and start the Docker container:
 
 ```
-sed -i 's/\r$//' startup.sh cleanup.sh entrypoint.sh
 chmod +x startup.sh cleanup.sh entrypoint.sh
 ```
 
@@ -62,16 +61,16 @@ This will automatically build, start and run the container
 ./startup.sh
 ```
 
-### Step 7: Access the Chatbot
+### Step 7: Access the internship finder chatbot:
 
 For Streamlit:
 
-- Once the container starts, Open browser at http://localhost:5002/team2f25
+- Once the container starts, Open browser at : http://localhost:5002/team2f25
 
   
 
 ---
-### Step 9: Clean Up
+### Step 9: Clean Up:
 
 When you are finished, run the cleanup script to stop and remove the Docker container and image.
 
