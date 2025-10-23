@@ -9,13 +9,10 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+import httpx
 
-from scraper import (
-    scrape_csusb_listings,
-    CSUSB_CSE_URL,
-    quick_company_links_playwright,
-)
-from query_to_filter import parse_query_to_filter, classify_intent
+from scraper import scrape_csusb_listings, CSUSB_CSE_URL
+from query_to_filter import classify_intent
 
 # === NEW: résumé helpers ===
 from resume_parser import (
@@ -28,6 +25,7 @@ from resume_parser import (
 APP_TITLE = "CSUSB Internship Finder Agent"
 DATA_DIR = Path("data")
 PARQUET_PATH = DATA_DIR / "internships.parquet"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # ---------- Page setup ----------
 st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
@@ -49,7 +47,7 @@ def ensure_ollama_ready():
             req = urllib.request.Request(f"{host}/api/pull", data=body, headers={"Content-Type":"application/json"})
             urllib.request.urlopen(req, timeout=300).read()
     except Exception:
-        st.warning("Ollama isn’t reachable; general chat may be slow or fail.")
+        st.warning("Ollama isn't reachable; general chat may be slow or fail.")
 
 ensure_ollama_ready()
 
@@ -68,8 +66,8 @@ inject_css()
 
 st.title(APP_TITLE)
 st.caption(
-    f"🎯 Deep search enabled • Source: {CSUSB_CSE_URL}\n\n"
-    "Try: **nasa internships**, **google remote intern**, **only java developer**, **show all internships**"
+    f"🎯 LLM-guided career page navigator • Source: {CSUSB_CSE_URL}\n\n"
+    "Try: **nasa internships**, **google remote intern**, **microsoft software engineer**, **show all internships**"
 )
 
 _flash = st.session_state.get("resume_flash")
@@ -81,9 +79,10 @@ if _flash:
 # --- Mode toggle ---
 mode = st.sidebar.radio("Mode", ["Auto", "General chat", "Internships"], index=0)
 deep_mode = st.sidebar.checkbox("Deep Search", value=False, help="⚠️ Slow: Scrapes company career pages for detailed postings (recommended: OFF for first try)")
+
 st.sidebar.markdown("---")
 st.sidebar.caption("⚙️ **Settings**")
-max_pages = st.sidebar.slider("Max company pages", 5, 50, 10, 5, help="Number of company sites to deep-scrape")
+max_hops = st.sidebar.slider("Max navigation hops per company", 3, 10, 5, 1, help="How many page clicks to follow before giving up")
 
 # ---------- Rate limit (10/min) ----------
 if "q_times" not in st.session_state:
@@ -115,9 +114,9 @@ def cache_age_hours() -> float:
     return (time.time() - PARQUET_PATH.stat().st_mtime) / 3600.0
 
 @st.cache_data(show_spinner=False, ttl=6*60*60)
-def fetch_csusb_df(max_pages: int = 80, deep: bool = True) -> pd.DataFrame:
+def fetch_csusb_df() -> pd.DataFrame:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    df = scrape_csusb_listings(deep=deep, max_pages=max_pages)
+    df = scrape_csusb_listings(deep=False, max_pages=1)
     df.to_parquet(PARQUET_PATH, index=False)
     return df
 
@@ -125,7 +124,7 @@ def fetch_csusb_df(max_pages: int = 80, deep: bool = True) -> pd.DataFrame:
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
-        "content": "👋 Hey! I'm your CSUSB Internship Finder. I can search the CSUSB CSE page and deep-dive into company career sites. What are you looking for?"
+        "content": "👋 Hey! I'm your CSUSB Internship Finder. I'll intelligently navigate company career pages to find internships matching your criteria. What are you looking for?"
     }]
 
 # === NEW: résumé state + auto-load from disk ===
@@ -138,6 +137,20 @@ try:
         st.session_state["resume_text"] = (DATA_DIR / "resume.txt").read_text(encoding="utf-8") if (DATA_DIR / "resume.txt").exists() else ""
 except Exception:
     pass
+
+# === NEW: track preference collection state ===
+st.session_state.setdefault("collecting_prefs", False)
+st.session_state.setdefault("current_pref_step", 0)
+st.session_state.setdefault("user_preferences", {})
+st.session_state.setdefault("initial_query", "")
+
+# Preference questions - one at a time
+PREF_QUESTIONS = [
+    {"key": "interests", "question": "What are your interests or fields you'd like to work in? (e.g., software development, data science, product management, marketing)"},
+    {"key": "roles", "question": "What specific job roles are you looking for? (e.g., Software Engineer Intern, Data Analyst Intern, Product Manager Intern)"},
+    {"key": "location", "question": "Do you have a location preference? (e.g., Remote, On-site, specific city/region)"},
+    {"key": "skills", "question": "What are your key technical or professional skills? (e.g., Python, JavaScript, problem-solving, communication)"}
+]
 
 # --- Message renderer ---
 def render_msg(role: str, content: str):
@@ -154,9 +167,7 @@ def history_text(last_n: int = 8) -> str:
 
 # ---------- LLM general reply ----------
 def llm_general_reply(user_text: str) -> str:
-    """
-    General small talk / help handled by local Ollama model via LangChain.
-    """
+    """Call Ollama LLM for general chat."""
     try:
         from langchain_ollama import ChatOllama
         from langchain_core.prompts import ChatPromptTemplate
@@ -186,50 +197,385 @@ def llm_general_reply(user_text: str) -> str:
         st.error(f"LLM Error: {str(e)}")
         return "I'm here to help! What would you like to know?"
 
-# ---------- Utility helpers ----------
-def nontrivial_filters(f: dict) -> int:
-    n = 0
-    if f.get("show_all"): n += 1
-    if f.get("company_name") and len(str(f["company_name"]).strip()) > 2: n += 1
-    if any(len(str(s).strip()) > 1 for s in (f.get("skills") or [])): n += 1
-    JOBISH = {"intern","developer","engineer","analyst","qa","data","software"}
-    if any(t in JOBISH for t in [str(t).lower() for t in (f.get("title_keywords") or [])]):
-        n += 1
-    return n
+# ---------- NEW: Extract preference from user response ----------
+def extract_preference_from_response(user_response: str, pref_key: str) -> list:
+    """Extract structured preference from user's freeform response."""
+    try:
+        from langchain_ollama import ChatOllama
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+        
+        llm = ChatOllama(
+            base_url=ollama_host,
+            model=model_name,
+            temperature=0.1,
+            streaming=False,
+            model_kwargs={"num_ctx": 1024, "num_predict": 100}
+        )
+        
+        sys_extract = f"""You are an internship preference extractor. Extract key terms from the user's response about {pref_key}.
 
-def describe_filters(f: dict) -> str:
-    parts = []
-    if f.get("company_name"): parts.append(f"**{f['company_name']}**")
-    if f.get("title_keywords"): parts.append(" ".join(f["title_keywords"]))
-    if f.get("skills"): parts.append(f"({', '.join(f['skills'])})")
-    if f.get("city") or f.get("state"):
-        parts.append(" ".join(filter(None, [f.get("city"), f.get("state")])))
-    return " • ".join(parts)
+Return ONLY a JSON array of strings. Example: ["item1", "item2", "item3"]
 
-def links_md(df: pd.DataFrame) -> str:
-    if df.empty:
-        return ""
-    out = []
-    for i, r in enumerate(df.itertuples(index=False), start=1):
-        title = (getattr(r, "title", "") or "Internship").strip()
-        company = (getattr(r, "company", "") or "").strip()
-        location = (getattr(r, "location", "") or "").strip()
-        label = f"**{title}**"
-        if company:
-            label += f" at {company}"
-        if location:
-            label += f" • {location}"
-        link = (getattr(r, "link", "") or "").strip()
-        out.append(f"{i}. {label}  \n   🔗 [View & Apply]({link})")
-    return "\n\n".join(out)
+Be faithful to what they said. Don't invent terms."""
 
-def any_match(df_: pd.DataFrame, cols: List[str], pattern: str, regex=True, flags=re.I):
-    mask = None
-    for c in cols:
-        if c not in df_.columns: continue
-        m = df_[c].fillna("").str.contains(pattern, regex=regex, flags=flags, na=False)
-        mask = m if mask is None else (mask | m)
-    return mask if mask is not None else pd.Series([False] * len(df_), index=df_.index)
+        prompt_extract = ChatPromptTemplate.from_messages([
+            ("system", sys_extract),
+            ("human", f"User response: {user_response}\n\nReturn JSON array now.")
+        ])
+        
+        response = (prompt_extract | llm).invoke({})
+        raw = response.content.strip()
+        
+        # Extract JSON array
+        json_match = re.search(r'\[[\s\S]*\]', raw)
+        if json_match:
+            extracted = json.loads(json_match.group(0))
+            return extracted if isinstance(extracted, list) else []
+        return []
+        
+    except Exception as e:
+        print(f"Extraction error: {e}")
+        return []
+
+# ---------- Backend navigation request ----------
+def navigate_career_page(company_url: str, query: str) -> dict:
+    """
+    Send navigation request to backend.
+    Backend will use LLM to navigate the career page until it finds job listings.
+    """
+    print(f"\n{'='*60}")
+    print(f"Calling backend to navigate: {company_url}")
+    print(f"Backend URL: {BACKEND_URL}")
+    print(f"Query: {query}")
+    print(f"Max hops: {max_hops}")
+    print(f"{'='*60}")
+    
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            print(f"Sending POST request to {BACKEND_URL}/navigate")
+            
+            response = client.post(
+                f"{BACKEND_URL}/navigate",
+                json={
+                    "start_url": company_url,
+                    "query": query,
+                    "max_hops": max_hops
+                }
+            )
+            
+            print(f"Response status: {response.status_code}")
+            response.raise_for_status()
+            
+            result = response.json()
+            print(f"Response data: {json.dumps(result, indent=2)[:500]}")
+            
+            return result
+            
+    except httpx.TimeoutException as e:
+        print(f"✗ Timeout error: {e}")
+        st.warning(f"Navigation timeout for {company_url}")
+        return {
+            "success": False,
+            "error": f"Timeout: {str(e)}",
+            "visited_urls": [company_url],
+            "found_links": [],
+            "final_url": company_url
+        }
+    except httpx.HTTPStatusError as e:
+        print(f"✗ HTTP error: {e}")
+        st.warning(f"Backend error for {company_url}: {e}")
+        return {
+            "success": False,
+            "error": f"HTTP {e.response.status_code}: {str(e)}",
+            "visited_urls": [company_url],
+            "found_links": [],
+            "final_url": company_url
+        }
+    except httpx.ConnectError as e:
+        print(f"✗ Connection error: {e}")
+        st.error(f"⚠️ Cannot connect to backend at {BACKEND_URL}. Is it running?")
+        return {
+            "success": False,
+            "error": f"Connection failed: {str(e)}",
+            "visited_urls": [company_url],
+            "found_links": [],
+            "final_url": company_url
+        }
+    except Exception as e:
+        print(f"✗ Navigation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "visited_urls": [company_url],
+            "found_links": [],
+            "final_url": company_url
+        }
+
+# ---------- LLM-directed internship search ----------
+def llm_internship_search_directed(user_text: str, csusb_links_df: pd.DataFrame, user_prefs: dict = None) -> tuple[str, pd.DataFrame]:
+    """
+    1. LLM receives CSUSB career page links
+    2. LLM decides which to navigate (up to 5), filtered by user preferences
+    3. Backend navigates each one using LLM guidance
+    4. LLM filters and presents best results
+    """
+    if csusb_links_df.empty:
+        return "Sorry, no company career pages available at the moment.", pd.DataFrame()
+    
+    try:
+        from langchain_ollama import ChatOllama
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+        
+        llm = ChatOllama(
+            base_url=ollama_host,
+            model=model_name,
+            temperature=0.2,
+            streaming=False,
+            model_kwargs={"num_ctx": 3072, "num_predict": 300}
+        )
+        
+        # Step 1: Get unique companies and build list
+        links_list = csusb_links_df[['company', 'link']].drop_duplicates().to_dict('records')
+        
+        # Filter out None values and build list
+        available_companies = []
+        for item in links_list:
+            company = item.get('company') or 'Unknown'
+            link = item.get('link') or ''
+            if link and link.startswith('http'):
+                available_companies.append(f"{company}: {link}")
+        
+        if not available_companies:
+            return "No valid company links found in the database.", pd.DataFrame()
+        
+        links_text = "\n".join(available_companies)
+        
+        st.sidebar.info(f"📋 Available companies: {len(available_companies)}")
+        
+        # Include user preferences in the prompt
+        prefs_text = ""
+        if user_prefs:
+            interests = user_prefs.get('interests', [])
+            roles = user_prefs.get('roles', [])
+            location = user_prefs.get('location', 'Any')
+            skills = user_prefs.get('skills', [])
+            
+            # Handle both list and string formats
+            interests_str = ', '.join(interests) if isinstance(interests, list) else str(interests)
+            roles_str = ', '.join(roles) if isinstance(roles, list) else str(roles)
+            skills_str = ', '.join(skills) if isinstance(skills, list) else str(skills)
+            
+            prefs_text = f"\nUser Preferences:\n- Interests: {interests_str}\n- Roles: {roles_str}\n- Location: {location}\n- Skills: {skills_str}"
+        
+        sys_step1 = """You are an internship search assistant. You have a list of companies with career page URLs.
+
+Your task: Match the user's query to companies in the available list, prioritizing their stated preferences.
+
+Rules:
+1. Return ONLY valid JSON (no markdown, no explanations)
+2. Use EXACT company names and URLs from the list provided
+3. If a company name in the query doesn't match any in the list, DON'T make it up
+4. If no matches found, return empty array
+5. Prioritize companies matching user preferences
+6. Select up to 5 companies to navigate
+
+Return JSON with two fields: "companies_to_navigate" (array of objects with "company" and "url" fields) and "reasoning" (string).""" + prefs_text
+
+        prompt1 = ChatPromptTemplate.from_messages([
+            ("system", sys_step1),
+            ("human", "Available companies and URLs:\n{links}\n\nUser query: {query}\n\nFind matching companies. Return ONLY valid JSON as response, nothing else.")
+        ])
+        
+        chain1 = prompt1 | llm
+        response1 = chain1.invoke({
+            "links": links_text,
+            "query": user_text
+        })
+        
+        # Debug output
+        st.sidebar.text_area("LLM Response (Debug)", response1.content[:300], height=100)
+        
+        try:
+            raw_response = response1.content.strip()
+            
+            # Try to parse as direct JSON first
+            try:
+                parsed = json.loads(raw_response)
+                # If it's an array, wrap it in the expected structure
+                if isinstance(parsed, list):
+                    scrape_decision = {"companies_to_navigate": parsed, "reasoning": "Companies matched"}
+                else:
+                    scrape_decision = parsed
+            except json.JSONDecodeError:
+                # Try to find JSON object or array in the response
+                json_match = re.search(r'[\{\[][\s\S]*[\}\]]', raw_response)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                    if isinstance(parsed, list):
+                        scrape_decision = {"companies_to_navigate": parsed, "reasoning": "Companies matched"}
+                    else:
+                        scrape_decision = parsed
+                else:
+                    scrape_decision = {"companies_to_navigate": [], "reasoning": "Could not extract JSON from response"}
+        except Exception as e:
+            print(f"Failed to parse LLM response: {e}")
+            print(f"LLM response was: {response1.content[:500]}")
+            scrape_decision = {"companies_to_navigate": [], "reasoning": f"Parse error: {str(e)}"}
+        
+        companies_to_navigate = scrape_decision.get("companies_to_navigate", [])[:5]
+        
+        if not companies_to_navigate:
+            reasoning = scrape_decision.get("reasoning", "No matching companies found")
+            available_list = ", ".join([
+                item.get('company') or 'Unknown' 
+                for item in links_list 
+                if item.get('company')
+            ][:10])
+            return f"I couldn't find matching companies. {reasoning}\n\n**Available companies on CSUSB:**\n{available_list}", pd.DataFrame()
+        
+        # Step 2: Navigate each company
+        status_placeholder = st.empty()
+        progress_bar = st.progress(0)
+        
+        all_navigation_results = []
+        
+        for idx, company_info in enumerate(companies_to_navigate, 1):
+            company_name = company_info.get("company", "Unknown")
+            company_url = company_info.get("url", "")
+            
+            if not company_url or not company_url.startswith("http"):
+                continue
+            
+            with status_placeholder:
+                st.info(f"🔍 Navigating {company_name} ({idx}/{len(companies_to_navigate)})...")
+            
+            progress_bar.progress(int((idx - 1) / len(companies_to_navigate) * 100))
+            
+            # Call backend to navigate
+            nav_result = navigate_career_page(company_url, user_text)
+            
+            # Store result even if not "successful"
+            found_links = nav_result.get("found_links", [])
+            visited_urls = nav_result.get("visited_urls", [])
+            
+            # Use the last visited URL as final_url if none provided
+            final_url = nav_result.get("final_url") or (visited_urls[-1] if visited_urls else company_url)
+            
+            all_navigation_results.append({
+                "company": company_name,
+                "final_url": final_url,
+                "visited_urls": visited_urls,
+                "found_links": found_links,
+                "success": nav_result.get("success", False)
+            })
+            
+            time.sleep(1)
+        
+        status_placeholder.empty()
+        progress_bar.empty()
+        
+        # Count how many had links
+        results_with_links = [r for r in all_navigation_results if r.get("found_links")]
+        
+        if not results_with_links:
+            # Still provide the career page URLs
+            career_pages = []
+            df_results = []
+            for r in all_navigation_results:
+                company = r.get("company", "Unknown")
+                url = r.get("final_url", "")
+                if url:
+                    career_pages.append(f"- [{company}]({url})")
+                    df_results.append({
+                        "title": f"{company} Career Page",
+                        "company": company,
+                        "url": url,
+                        "link": url
+                    })
+            
+            if career_pages:
+                pages_text = "\n".join(career_pages)
+                result_df = pd.DataFrame(df_results) if df_results else pd.DataFrame()
+                return f"I found the career pages but couldn't automatically extract job listings. Here are the pages you can visit:\n\n{pages_text}", result_df
+            
+            return f"I navigated {len(companies_to_navigate)} companies but couldn't find job listing pages. The companies may have dynamic job sites.", pd.DataFrame()
+        
+        # Step 3: LLM analyzes and presents results
+        results_text = json.dumps(all_navigation_results, indent=2)
+        
+        sys_step2 = """You are a helpful internship search assistant. You have results from navigating company career pages.
+
+For each company, you have:
+- The career page they reached (final_url)
+- Intermediate pages visited
+- Links found on the final page
+
+Analyze and provide:
+1. Brief summary of what was found
+2. Highlight the most relevant internship opportunities
+3. Provide direct links when available
+
+Be conversational, encouraging, and concise. Focus on actionable next steps."""
+
+        prompt2 = ChatPromptTemplate.from_messages([
+            ("system", sys_step2),
+            ("human", "Navigation results:\n{results}\n\nUser query: {query}\n\nAnalyze and recommend:")
+        ])
+        
+        chain2 = prompt2 | llm
+        response2 = chain2.invoke({
+            "results": results_text,
+            "query": user_text
+        })
+        
+        result_text = response2.content.strip()
+        
+        # Add stats
+        total_links = sum(len(r.get("found_links", [])) for r in all_navigation_results)
+        successful_navs = sum(1 for r in all_navigation_results if r.get("success"))
+        
+        stats_text = f"\n\n📊 **Navigation Summary:** Explored {len(all_navigation_results)} companies, found {total_links} links across {successful_navs} successful navigations."
+        result_text += stats_text
+        
+        # Convert to dataframe for display
+        df_results = []
+        for nav_result in all_navigation_results:
+            company = nav_result.get("company") or "Unknown"
+            found_links = nav_result.get("found_links") or []
+            
+            for link in found_links[:10]:
+                if not isinstance(link, dict):
+                    continue
+                
+                link_url = link.get("url") or ""
+                link_text = link.get("text") or ""
+                
+                if link_url and link_url.startswith('http'):
+                    df_results.append({
+                        "title": link_text if link_text else "Link",
+                        "company": company,
+                        "url": link_url,
+                        "link": link_url
+                    })
+        
+        result_df = pd.DataFrame(df_results) if df_results else pd.DataFrame()
+        
+        return result_text, result_df
+        
+    except Exception as e:
+        st.error(f"Search Error: {str(e)}")
+        print(f"Error in llm_internship_search_directed: {e}")
+        import traceback
+        traceback.print_exc()
+        return "Sorry, I encountered an error during the search. Please try again.", pd.DataFrame()
 
 # Floating "+" popover anchored to the chat input (no middle duplicate, no flicker)
 user_msg = st.chat_input("Type your question…")
@@ -244,10 +590,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# === NEW: résumé state + auto-load from disk ===
-st.session_state.setdefault("resume_text", "")
-st.session_state.setdefault("resume_data", {})
-
 # NEW: fresh uploader instance + cross-rerun flash message
 st.session_state.setdefault("resume_uploader_key", "resume_uploader_0")
 st.session_state.setdefault("resume_flash", "")
@@ -259,7 +601,7 @@ with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
         "Upload résumé",
         type=["pdf", "docx", "txt"],
         label_visibility="collapsed",
-        key=st.session_state["resume_uploader_key"],  # <- dynamic key
+        key=st.session_state["resume_uploader_key"],
     )
     if up is not None:
         with st.spinner("Extracting résumé…"):
@@ -272,7 +614,7 @@ with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
         # Show success *after* rerender in main page
         st.session_state["resume_flash"] = "Résumé saved. You can upload another anytime via ➕."
 
-        # Reset uploader so it’s empty on the next render, then refresh
+        # Reset uploader so it's empty on the next render, then refresh
         import time as _t
         st.session_state["resume_uploader_key"] = f"resume_uploader_{int(_t.time()*1000)}"
         st.rerun()
@@ -313,7 +655,7 @@ components.html("""
       proxy.addEventListener('click', () => {
         const real = getRealPopoverButton();
         if (real) {
-          real.click();                 // open the real popover
+          real.click();
           setTimeout(positionPanel, 30);
         }
       });
@@ -391,7 +733,6 @@ components.html("""
 </script>
 """, height=0)
 
-
 # ---- Only stop if no input AFTER rendering the + button ----
 
 
@@ -403,6 +744,8 @@ if not allow_query():
 st.session_state.messages.append({"role": "user", "content": user_msg})
 render_msg("user", user_msg)
 
+# ---------- Routing ----------
+intent = classify_intent(user_msg)
 txt_lo = user_msg.lower()
 
 # === NEW: detect résumé questions BEFORE routing ===
@@ -415,10 +758,8 @@ RESUME_KEYS = [
 def is_resume_question(q: str) -> bool:
     if any(k in q for k in ["resume","résumé","cv"]):
         return True
-    # If the user has uploaded a resume, allow shorthand like "show experience"
     if st.session_state.get("resume_data"):
         if any(k in q for k in RESUME_KEYS):
-            # Prefer cases referring to the user's data
             return (" my " in f" {q} ") or (" me " in f" {q} ") or True
     return False
 
@@ -427,41 +768,24 @@ if is_resume_question(txt_lo):
     if data:
         reply = answer_from_resume(user_msg, data)
     else:
-        reply = "I don’t have a résumé saved yet. Click the **➕** button beside the chat box to upload one."
+        reply = "I don't have a résumé saved yet. Click the **➕** button beside the chat box to upload one."
     render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
 
-    # --- after reading user_msg, before parse_query_to_filter/classify_intent ---
+# --- Mode + Intent routing ---
 txt_lo = user_msg.lower()
-
-RESUME_KEYS = {
-    "resume","résumé","cv","experience","experiences","skills","projects",
-    "education","school","degree","certifications","gpa",
-    "linkedin","github","portfolio","website","email","phone","name","summary"
-}
-
-def is_resume_question(q: str) -> bool:
-    if any(k in q for k in ("resume", "résumé", "cv")):
-        return True
-    if st.session_state.get("resume_data"):  # allow shorthand like "show experience"
-        return any(k in q for k in RESUME_KEYS)
-    return False
-
-
-# ---------- Routing (unchanged) ----------
-filters = parse_query_to_filter(user_msg)
 intent = classify_intent(user_msg)
 has_intern_kw = "intern" in txt_lo
-has_filters = nontrivial_filters(filters) > 0
-st.sidebar.caption(f"🔍 Intent: {intent} | Filters: {has_filters}")
+
+st.sidebar.caption(f"🎯 Intent: {intent}")
 
 if mode == "General chat":
     route = "general"
 elif mode == "Internships":
     route = "internships"
 else:
-    if intent == "internship_search" or has_intern_kw or has_filters:
+    if intent == "internship_search" or has_intern_kw:
         route = "internships"
     else:
         route = "general"
@@ -474,167 +798,102 @@ if route == "general":
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.stop()
 
-# ---------- INTERNSHIP SEARCH ----------
-need_refresh = cache_age_hours() > 6 or any(w in txt_lo for w in ["refresh", "reload", "latest"])
-df = load_cached_df()
+# ---------- INTERNSHIP SEARCH: PREFERENCE COLLECTION (ONE QUESTION AT A TIME) ----------
+# Start preference collection if not already doing so
+if not st.session_state.get("collecting_prefs"):
+    st.session_state.collecting_prefs = True
+    st.session_state.current_pref_step = 0
+    st.session_state.initial_query = user_msg
+    st.session_state.user_preferences = {}
 
-if df.empty or need_refresh:
+# Check if we're still collecting preferences
+if st.session_state.get("collecting_prefs"):
+    current_step = st.session_state.get("current_pref_step", 0)
+    
+    # If this is not the first message, extract the user's answer to the previous question
+    if current_step > 0:
+        prev_pref_key = PREF_QUESTIONS[current_step - 1]["key"]
+        extracted = extract_preference_from_response(user_msg, prev_pref_key)
+        
+        # Store extracted preferences
+        if extracted:
+            st.session_state.user_preferences[prev_pref_key] = extracted
+    
+    # Check if we've asked all questions
+    if current_step >= len(PREF_QUESTIONS):
+        # Done collecting preferences - now do the search
+        st.session_state.collecting_prefs = False
+        # Proceed to internship search below
+    else:
+        # Ask the next question
+        question = PREF_QUESTIONS[current_step]["question"]
+        
+        render_msg("assistant", question)
+        st.session_state.messages.append({"role": "assistant", "content": question})
+        
+        # Increment step for next iteration
+        st.session_state.current_pref_step += 1
+        st.stop()
+
+# ---------- INTERNSHIP SEARCH (LLM-GUIDED NAVIGATION) ----------
+need_refresh = cache_age_hours() > 24 or any(w in txt_lo for w in ["refresh", "reload", "latest"])
+csusb_df = load_cached_df()
+
+if csusb_df.empty or need_refresh:
     if need_refresh:
         fetch_csusb_df.clear()
     status_placeholder = st.empty()
     progress_bar = st.progress(0)
     with status_placeholder:
-        st.info(f"🔄 {'Deep-scraping' if deep_mode else 'Fetching'} internships from CSUSB CSE page...")
-    progress_bar.progress(10)
-    df = fetch_csusb_df(max_pages=max_pages, deep=deep_mode)
+        st.info("📡 Fetching company career pages from CSUSB...")
+    
+    progress_bar.progress(50)
+    csusb_df = fetch_csusb_df()
     progress_bar.progress(100)
     status_placeholder.empty()
     progress_bar.empty()
 
-table = df.copy()
+# LLM decides which companies to navigate based on preferences, backend navigates them
+user_prefs = st.session_state.get("user_preferences", {})
+initial_query = st.session_state.get("initial_query", user_msg)
 
-# Apply filters
-if not filters.get("show_all"):
-    comp = (filters.get("company_name") or "").strip()
-    if comp:
-        pat = "(" + "|".join(map(re.escape, [comp] + ([p for p in comp.split() if len(p) > 2] if " " in comp else []))) + ")"
-        mask = any_match(table, ["company","title","details","host"], pat, regex=True)
-        initial_matches = table[mask]
-        if len(initial_matches) > 0:
-            table = initial_matches
-            st.sidebar.caption(f"✓ Found {len(table)} in cached data")
-        else:
-            st.sidebar.caption(f"⚠️ Not in cache, searching {comp} directly...")
-            with st.spinner(f"🔍 Searching {comp} career pages (this may take 30-60 seconds)..."):
-                progress = st.progress(0)
-                status = st.empty()
-                status.info(f"Step 1/3: Looking for {comp} on CSUSB page...")
-                progress.progress(20)
-                fb = quick_company_links_playwright(comp, deep=deep_mode)
-                if isinstance(fb, pd.DataFrame) and len(fb) > 0:
-                    status.success(f"Step 3/3: Found {len(fb)} internships!")
-                    progress.progress(100)
-                    time.sleep(0.5)
-                    status.empty(); progress.empty()
-                    table = fb
-                else:
-                    status.warning(f"Could not find internships for {comp}")
-                    progress.progress(100)
-                    time.sleep(1)
-                    status.empty(); progress.empty()
-                    table = pd.DataFrame()
-
-    title_tokens = [t for t in (filters.get("title_keywords") or []) if str(t).strip()]
-    if title_tokens:
-        strict = bool(re.search(r"\b(only|strict|exact)\b", user_msg, re.I))
-        if strict:
-            SYN = {
-                "qa": ["qa","quality assurance","test","testing","software tester"],
-                "developer": ["developer","software developer","software engineer","sde","programmer"],
-                "java": ["java","java developer","java engineer"],
-                "business analyst": ["business analyst","ba","requirements analyst"],
-                "data analyst": ["data analyst","analytics","business intelligence","bi analyst"],
-            }
-            alts = []
-            for t in title_tokens:
-                alts += SYN.get(t.lower(), [t])
-            pat = r"(" + "|".join(map(re.escape, sorted(set(alts)))) + r")"
-            table = table[any_match(table, ["title","details"], pat, regex=True)]
-        else:
-            pat = r"(" + "|".join(map(re.escape, title_tokens)) + r")"
-            table = table[any_match(table, ["title","details"], pat, regex=True)]
-
-    for s in (filters.get("skills") or []):
-        s = str(s).strip()
-        if s:
-            table = table[any_match(table, ["title","details"], re.escape(s), regex=True)]
-
-    explicit_loc = bool(re.search(r"\b(remote|onsite|hybrid|usa|united states|[A-Z]{2}|\d{5})\b", user_msg, re.I))
-    for k in ("city","state","country","zipcode"):
-        v = (filters.get(k) or "").strip()
-        if v and explicit_loc:
-            table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True)]
-        else:
-            filters[k] = ""
-
-    if filters.get("remote_type"):
-        rt = filters["remote_type"]
-        cols = ["remote"] if "remote" in table.columns else ["details"]
-        table = table[any_match(table, cols, re.escape(rt), regex=True)]
-    
-    for k in ("city","state","country","zipcode"):
-        v = (filters.get(k) or "").strip()
-        if v:
-            table = table[any_match(table, ["title","location","details"], re.escape(v), regex=True, flags=re.I)]
-
-    if filters.get("education_level"):
-        table = table[any_match(table, ["details","education"], re.escape(str(filters["education_level"])), regex=True)]
-    if filters.get("experience_level"):
-        table = table[any_match(table, ["details"], re.escape(str(filters["experience_level"])), regex=True)]
-    if filters.get("salary_min") and "salary" in table.columns:
-        try:
-            minv = int(str(filters["salary_min"]).replace("$","").replace(",",""))
-            amt = table["salary"].fillna("").str.replace(",","").str.extract(r"(\d+)")[0].astype(float)
-            table = table[amt >= minv]
-        except:
-            pass
-
-# Ensure columns exist
-cols = ["title","company","location","posted_date","salary","education","remote","host","link","source","details"]
-for c in cols:
-    if c not in table.columns:
-        table[c] = None
-
-desc = describe_filters(filters)
-
-# Generate response
-if len(table) == 0:
-    header = f"😔 Sorry, I couldn't find any internships" + (f" for **{desc}**" if desc else "") + " on the CSUSB page."
-    if deep_mode:
-        header += "\n\n💡 **Tip**: Try a broader search or check if the company name is spelled correctly."
-    answer_md = header
-else:
-    header = f"🎉 Found **{len(table)}** internship" + ("s" if len(table) > 1 else "")
-    if desc:
-        header += f" for {desc}"
-    header += "!"
-    if deep_mode:
-        header += "\n\n✨ *Results include deep-scraped data from company career pages*"
-    answer_md = header + "\n\n" + links_md(table)
+with st.spinner("Searching for internships matching your preferences..."):
+    answer_md, results_df = llm_internship_search_directed(initial_query, csusb_df, user_prefs)
 
 render_msg("assistant", answer_md)
+st.session_state.messages.append({"role": "assistant", "content": answer_md})
 
-# Show detailed table
-if not table.empty:
-    st.markdown("### 📊 Detailed Results")
-    col1, col2, col3 = st.columns(3)
+# Show results table if links were found
+if not results_df.empty:
+    st.markdown("### 📊 Found Links")
+    
+    # Metrics
+    col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total Internships", len(table))
+        st.metric("Total Links", len(results_df))
     with col2:
-        unique_companies = table["company"].dropna().nunique()
+        unique_companies = results_df["company"].dropna().nunique()
         st.metric("Companies", unique_companies)
-    with col3:
-        remote_count = table[table["remote"].fillna("").str.contains("remote", case=False, na=False)].shape[0] if "remote" in table.columns else 0
-        st.metric("Remote Positions", remote_count)
-    display_cols = [c for c in cols if c in table.columns and table[c].notna().any()]
+    
+    # Display table
+    cols = ["title", "company", "url"]
+    display_cols = [c for c in cols if c in results_df.columns and results_df[c].notna().any()]
     st.dataframe(
-        table[display_cols],
+        results_df[display_cols],
         width='stretch',
         hide_index=True,
         column_config={
-            "link": st.column_config.LinkColumn("Apply Link", help="Click to open posting"),
-            "title": st.column_config.TextColumn("Title", width="medium"),
+            "url": st.column_config.LinkColumn("Visit", help="Click to open link"),
+            "title": st.column_config.TextColumn("Link Text", width="medium"),
             "company": st.column_config.TextColumn("Company", width="medium"),
-            "location": st.column_config.TextColumn("Location", width="small"),
-            "posted_date": st.column_config.DateColumn("Posted", width="small"),
         },
     )
-    csv = table.to_csv(index=False)
+    
+    # Download option
+    csv = results_df.to_csv(index=False)
     st.download_button(
         label="📥 Download Results (CSV)",
         data=csv,
         file_name=f"csusb_internships_{time.strftime('%Y%m%d_%H%M%S')}.csv",
         mime="text/csv",
     )
-
-st.session_state.messages.append({"role": "assistant", "content": answer_md})
