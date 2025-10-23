@@ -10,3 +10,7 @@ langchain-ollama
 langchain-core
 pypdf
 python-docx
+uvicorn
+fastapi
+pydantic
+httpx
