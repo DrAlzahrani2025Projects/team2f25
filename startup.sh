@@ -45,6 +45,15 @@ if [ -n "${OCCUPYING_IDS// }" ]; then
   docker rm -f ${OCCUPYING_IDS} >/dev/null 2>&1 || true
 fi
 
+# Also free host processes holding the ports (Linux/macOS)
+if command -v lsof >/dev/null 2>&1; then
+  for p in "$PORT" "$OLLAMA_PORT"; do
+    pids=$(lsof -t -nP -iTCP:$p -sTCP:LISTEN 2>/dev/null || true)
+    [ -n "$pids" ] && kill -9 $pids >/dev/null 2>&1 || true
+  done
+fi
+
+
 # Normalize line endings and ensure scripts are executable
 if command -v sed >/dev/null 2>&1; then
   sed -i 's/\r$//' entrypoint.sh startup.sh cleanup.sh 2>/dev/null || true
