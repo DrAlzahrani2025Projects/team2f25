@@ -8,6 +8,7 @@ from typing import List
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+# from streamlit import session_state as ss
 
 import httpx
 
@@ -578,169 +579,102 @@ Be conversational, encouraging, and concise. Focus on actionable next steps."""
         return "Sorry, I encountered an error during the search. Please try again.", pd.DataFrame()
 
 # Floating "+" popover anchored to the chat input (no middle duplicate, no flicker)
-user_msg = st.chat_input("Type your question…")
+# Replace the entire resume upload section with this:
 
+# ==================== RESUME UPLOAD SECTION ====================
 
+# Session state setup
+st.session_state.setdefault("resume_uploader_key", "resume_uploader_0")
+st.session_state.setdefault("resume_flash", "")
+st.session_state.setdefault("show_resume_uploader", False)
+
+# CSS for floating resume button
 st.markdown("""
 <style>
-  [data-testid="stPopover"] > button {
-    width:10px; height:10px; border-radius:9999px;
-    padding:0; margin:0; box-shadow:0 6px 18px rgba(0,0,0,.15);
-  }
+/* Floating + button near chat input */
+.resume-upload-btn {
+    position: fixed;
+    bottom: 24px;
+    left: calc(50% - 340px);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.resume-upload-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.5);
+}
+
+/* Adjust chat input padding */
+[data-testid="stChatInput"] {
+    padding-left: 50px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# NEW: fresh uploader instance + cross-rerun flash message
-st.session_state.setdefault("resume_uploader_key", "resume_uploader_0")
-st.session_state.setdefault("resume_flash", "")
-
-
-with st.popover("➕", help="Upload résumé (PDF/DOCX/TXT)"):
-    st.write("Upload a résumé file. Extraction runs automatically.")
+# Sidebar resume uploader (cleaner approach)
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📎 Resume Upload")
+    
     up = st.file_uploader(
-        "Upload résumé",
+        "Upload your resume",
         type=["pdf", "docx", "txt"],
-        label_visibility="collapsed",
         key=st.session_state["resume_uploader_key"],
+        help="Upload PDF, DOCX, or TXT file"
     )
+    
     if up is not None:
-        with st.spinner("Extracting résumé…"):
+        with st.spinner("Extracting resume..."):
             text = extract_resume_text(up)
             data = llm_resume_extract(text)
             save_resume(data, text)
             st.session_state.resume_text = text
             st.session_state.resume_data = data
 
-        # Show success *after* rerender in main page
-        st.session_state["resume_flash"] = "Résumé saved. You can upload another anytime via ➕."
-
-        # Reset uploader so it's empty on the next render, then refresh
+        st.success("✅ Resume saved!")
+        
         import time as _t
         st.session_state["resume_uploader_key"] = f"resume_uploader_{int(_t.time()*1000)}"
         st.rerun()
+    
+    # Show resume info if loaded
+    if st.session_state.get("resume_data"):
+        with st.expander("📄 Resume Info"):
+            data = st.session_state["resume_data"]
+            if data.get("name"):
+                st.write(f"**Name:** {data['name']}")
+            if data.get("email"):
+                st.write(f"**Email:** {data['email']}")
+            if data.get("skills"):
+                st.write(f"**Skills:** {', '.join(data['skills'][:5])}")
 
+# Chat input
+user_msg = st.chat_input("Type your question…")
 
-components.html("""
-<script>
-(() => {
-  const doc = parent.document;
-
-  // Helpers
-  const $  = (sel, root=doc) => root.querySelector(sel);
-  const $$ = (sel, root=doc) => Array.from(root.querySelectorAll(sel));
-
-  function getRealPopoverButton() {
-  // pick the NEWEST popover trigger after a rerender
-  const btns = $$('[data-testid="stPopoverButton"] button');
-  if (btns.length) return btns[btns.length - 1];
-  const wraps = $$('[data-testid="stPopoverButton"]');
-  return wraps.length ? wraps[wraps.length - 1] : null;
-}
-
-
-  function ensureProxyPlus() {
-    const chat = $('[data-testid="stChatInput"]');
-    if (!chat) return null;
-
-    // Create once
-    let proxy = chat.querySelector('#plus-proxy');
-    if (!proxy) {
-      proxy = doc.createElement('button');
-      proxy.id = 'plus-proxy';
-      proxy.type = 'button';
-      proxy.setAttribute('aria-label','Add attachments');
-      proxy.textContent = '+';
-      chat.appendChild(proxy);
-
-      proxy.addEventListener('click', () => {
-        const real = getRealPopoverButton();
-        if (real) {
-          real.click();
-          setTimeout(positionPanel, 30);
-        }
-      });
-    }
-    return proxy;
-  }
-
-  // Hide the real anchor so it doesn't occupy layout anywhere
-  function hideRealAnchor() {
-    const anchor = $('[data-testid="stPopover"]');
-    if (!anchor) return;
-    Object.assign(anchor.style, {
-      position: 'fixed',
-      left: '-10000px',
-      top: '0',
-      width: '0',
-      height: '0',
-      opacity: '0',
-      pointerEvents: 'none'
-    });
-  }
-
-  function getPanel() {
-    // BaseWeb renders the panel in a portal
-    const panels = $$('[data-baseweb="popover"]');
-    return panels.length ? panels[panels.length - 1] : null;
-  }
-
-  function positionPanel() {
-  const proxy = ensureProxyPlus();
-  const panel = getPanel();
-  if (!proxy || !panel) return;
-
-  const r = proxy.getBoundingClientRect();
-  const h = panel.offsetHeight || 260;
-  const w = panel.offsetWidth || 340;
-
-  // Prefer above the +; if not enough room, place below
-  let top = r.top - h - 10;
-  if (top < 16) top = Math.min(r.bottom + 10, window.innerHeight - h - 16);
-
-  // Clamp horizontally so the panel stays on-screen
-  let left = r.left;
-  left = Math.max(16, Math.min(left, window.innerWidth - w - 16));
-
-  Object.assign(panel.style, {
-    position: 'fixed',
-    left: left + 'px',
-    top:  top + 'px',
-    right: 'auto',
-    bottom: 'auto',
-    transform: 'none',
-    zIndex: '4000',
-    maxWidth: 'min(420px, calc(100vw - 32px))'
-  });
-}
-
-
-  function sync() {
-    ensureProxyPlus();
-    hideRealAnchor();
-    positionPanel();
-  }
-
-  // Run and keep in sync with Streamlit re-renders
-  window.addEventListener('load', sync, { once: true });
-  sync();
-  new MutationObserver(sync).observe(parent.document.body, { childList: true, subtree: true });
-  addEventListener('resize', positionPanel, { passive: true });
-  // Reposition as soon as the panel opens
-  doc.addEventListener('click', (e) => {
-    if (e.target.closest('#plus-proxy')) setTimeout(positionPanel, 0);
-  }, true);
-})();
-</script>
-""", height=0)
-
-# ---- Only stop if no input AFTER rendering the + button ----
-
-
+# Stop if no input
 if not user_msg:
     st.stop()
 if not allow_query():
     st.stop()
 
+# Rest of your code continues...
+
+# Continue with rest of your app logic...
+# Rest of your code continues...
 st.session_state.messages.append({"role": "user", "content": user_msg})
 render_msg("user", user_msg)
 
