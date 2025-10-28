@@ -8,10 +8,11 @@ Before you begin, ensure you have the following:
 4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
 
 
-
-Jupyter Notebook (for documentation and demos)
-Install Jupyter
 ---
+
+## Running the Application
+
+Follow these steps to get the application running on your local machine.
 
 ### Step 1: Remove the existing code directory completely:
 
