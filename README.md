@@ -14,7 +14,7 @@ Before you begin, ensure you have the following:
 
 Follow these steps to get the application running on your local machine.
 
-### Step 1: Remove the existing code directory completely:
+### Step 1: Remove the existing code directory completely
 
 Because the local repository can't been updated correctly, need to remove the directory first.
 
@@ -22,7 +22,7 @@ Because the local repository can't been updated correctly, need to remove the di
 rm -rf team2f25
 ```
 
-### Step 2: Clone the Repository:
+### Step 2: Clone the Repository
 
 Clone the GitHub repository to your local machine:
 
@@ -30,7 +30,7 @@ Clone the GitHub repository to your local machine:
 git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
-### Step 3: Navigate to the Repository:
+### Step 3: Navigate to the Repository
 
 Change to the cloned repository directory:
 
@@ -38,7 +38,7 @@ Change to the cloned repository directory:
 cd team2f25
 ```
 
-### Step 4: Pull the Latest Version:
+### Step 4: Pull the Latest Version
 
 Update the repository to the latest version:
 
@@ -58,7 +58,7 @@ chmod +x scripts/startup.sh scripts/cleanup.sh
 ```
 
 
-### Step 6: Run the startup file:
+### Step 6: Run the startup script
 
 This will automatically build, start and run the container
 
@@ -66,7 +66,7 @@ This will automatically build, start and run the container
 ./startup.sh
 ```
 
-### Step 7: Access the internship finder chatbot:
+### Step 7: Access the internship finder chatbot
 
 For Streamlit:
 
@@ -75,7 +75,7 @@ For Streamlit:
   
 
 ---
-### Step 9: Clean Up:
+### Step 8: Clean Up
 
 When you are finished, run the cleanup script to stop and remove the Docker container and image.
 
