@@ -26,7 +26,7 @@ rm -rf team2f25
 
 Clone the GitHub repository to your local machine:
 
-```
+```bash
 git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
@@ -34,7 +34,7 @@ git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 
 Change to the cloned repository directory:
 
-```
+```bash
 cd team2f25
 ```
 
@@ -42,24 +42,27 @@ cd team2f25
 
 Update the repository to the latest version:
 
-```
+```bash
 git pull origin main
 ```
 
 
-### Step 5: Make the startup file executable:
+### Step 5: Make Scripts Executable
 
-Run the setup script to build and start the Docker container:
+Make the setup and cleanup scripts executable. This step only needs to be done once.
 
+*Note: If you are on Windows, you must run this command in a `bash` terminal, such as the one provided by Git Bash or WSL.*
+
+```bash
+chmod +x scripts/startup.sh scripts/cleanup.sh
 ```
-chmod +x startup.sh cleanup.sh entrypoint.sh
-```
+
 
 ### Step 6: Run the startup file:
 
 This will automatically build, start and run the container
 
-```
+```bash
 ./startup.sh
 ```
 
