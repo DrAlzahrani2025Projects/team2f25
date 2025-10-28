@@ -8,6 +8,7 @@ Before you begin, ensure you have the following:
 4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
 
 
+
 Jupyter Notebook (for documentation and demos)
 Install Jupyter
 ---
