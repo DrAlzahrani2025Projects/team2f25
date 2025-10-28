@@ -54,7 +54,7 @@ Make the setup and cleanup scripts executable. This step only needs to be done o
 *Note: If you are on Windows, you must run this command in a `bash` terminal, such as the one provided by Git Bash or WSL.*
 
 ```bash
-chmod +x scripts/startup.sh scripts/cleanup.sh
+chmod +x startup.sh cleanup.sh entrypoint.sh
 ```
 
 
