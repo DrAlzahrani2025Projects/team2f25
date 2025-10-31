@@ -8,11 +8,13 @@ Before you begin, ensure you have the following:
 4. **Windows**: Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) and enable Docker's WSL integration by following [this guide](https://docs.docker.com/desktop/windows/wsl/).
 
 
-Jupyter Notebook (for documentation and demos)
-Install Jupyter
 ---
 
-### Step 1: Remove the existing code directory completely:
+## Running the Application
+
+Follow these steps to get the application running on your local machine.
+
+### Step 1: Remove the existing code directory completely
 
 Because the local repository can't been updated correctly, need to remove the directory first.
 
@@ -20,48 +22,51 @@ Because the local repository can't been updated correctly, need to remove the di
 rm -rf team2f25
 ```
 
-### Step 2: Clone the Repository:
+### Step 2: Clone the Repository
 
 Clone the GitHub repository to your local machine:
 
-```
+```bash
 git clone https://github.com/DrAlzahrani2025Projects/team2f25.git
 ```
 
-### Step 3: Navigate to the Repository:
+### Step 3: Navigate to the Repository
 
 Change to the cloned repository directory:
 
-```
+```bash
 cd team2f25
 ```
 
-### Step 4: Pull the Latest Version:
+### Step 4: Pull the Latest Version
 
 Update the repository to the latest version:
 
-```
+```bash
 git pull origin main
 ```
 
 
-### Step 5: Make the startup file executable:
+### Step 5: Make Scripts Executable
 
-Run the setup script to build and start the Docker container:
+Make the setup and cleanup scripts executable. This step only needs to be done once.
 
+*Note: If you are on Windows, you must run this command in a `bash` terminal, such as the one provided by Git Bash or WSL.*
+
+```bash
+chmod +x scripts/startup.sh scripts/cleanup.sh
 ```
-chmod +x startup.sh cleanup.sh entrypoint.sh
-```
 
-### Step 6: Run the startup file:
+
+### Step 6: Run the startup script
 
 This will automatically build, start and run the container
 
-```
-./startup.sh
+```bash
+./scripts/startup.sh
 ```
 
-### Step 7: Access the internship finder chatbot:
+### Step 7: Access the internship finder chatbot
 
 For Streamlit:
 
@@ -70,12 +75,12 @@ For Streamlit:
   
 
 ---
-### Step 9: Clean Up:
+### Step 8: Clean Up
 
 When you are finished, run the cleanup script to stop and remove the Docker container and image.
 
 ```bash
-./cleanup.sh
+./scripts/cleanup.sh
 ```
 
 ---
