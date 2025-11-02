@@ -3,6 +3,9 @@ import os, time, math, re, json
 import pandas as pd
 
 from backend import navigate_career_page
+from langchain_ollama import ChatOllama
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
 
 # --- Ollama warm-up (once) ---
 @st.cache_resource(show_spinner=False)
@@ -22,6 +25,66 @@ def ensure_ollama_ready():
             urllib.request.urlopen(req, timeout=300).read()
     except Exception:
         st.warning("Ollama isn't reachable; general chat may be slow or fail.")
+
+@st.cache_resource
+def initialize_llm():
+    """Initialize Ollama LLM"""
+    try:        
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+        
+        llm = ChatOllama(
+            base_url=ollama_host,
+            model=model_name,
+            temperature=0.3,
+            streaming=False,
+            model_kwargs={"num_ctx": 1536, "num_predict": 180}
+        )
+        
+        return llm
+        
+    except Exception as e:
+        st.error(f"LLM Error: {str(e)}")
+        return "I'm here to help! What would you like to know?"
+
+def llm_query(llm, user_text: str) -> str:
+    """
+    Query the LLM with a user message and optional conversation history.
+    
+    Args:
+        llm: ChatOllama instance (from initialize_llm())
+        user_text: Current user message
+        history_messages: Optional list of previous SystemMessage/HumanMessage objects
+    
+    Returns:
+        String response from the LLM
+    """
+    try:
+        # System prompt
+        sys_message = SystemMessage(
+            content="You are a helpful and friendly assistant for CSUSB internship search. Keep replies concise and encouraging."
+        )
+        
+        # Build message list
+        messages = [sys_message]
+        
+        # Add current user message
+        st.session_state.messages.append(HumanMessage(content=user_text))
+
+        # Add conversation history
+        messages.extend(st.session_state.messages[1:][-5:])
+        
+        
+        # Invoke LLM
+        response = llm.invoke(messages)
+        st.session_state.messages.append(AIMessage(content=response.content.strip()))
+
+        return response.content.strip()
+        
+    except Exception as e:
+        st.error(f"LLM Error: {str(e)}")
+        return "I'm here to help! What would you like to know?"
+
 
 # ---------- LLM general reply ----------
 def llm_general_reply(user_text: str, history: str) -> str:
