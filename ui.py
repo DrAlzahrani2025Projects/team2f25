@@ -164,8 +164,13 @@ def init_resume_ui():
 
 # --- Render history ---
 def render_message_history():
-    for m in st.session_state.messages:
-        render_msg(m["role"], m["content"])
+    for m in range(len(st.session_state.messages)):
+        if m == 0:
+            render_msg("llm", st.session_state.messages[m]["content"])
+        elif m % 2 == 0:
+            render_msg("llm", st.session_state.messages[m].content)
+        else: 
+            render_msg("user", st.session_state.messages[m].content)
 
 def get_max_hops():
     return max_hops
