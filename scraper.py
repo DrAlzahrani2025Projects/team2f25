@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import List, Dict, Optional, Iterable
 from urllib.parse import urljoin, urlparse
 
+from playwright.async_api import async_playwright
+import asyncio
 import os
 import re
 import time
@@ -150,6 +152,30 @@ def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
     except Exception:
         pass
     return None
+
+async def _deep_scrape_many(urls: list[str], concurrency: int = 8) -> list[dict]:
+    sem = asyncio.Semaphore(concurrency)
+    async with async_playwright() as pw:
+        async def bound(u):
+            async with sem:
+                return await _deep_scrape_one_async(pw, u)
+        tasks = [asyncio.create_task(bound(u)) for u in urls]
+        out = await asyncio.gather(*tasks, return_exceptions=True)
+    rows = []
+    for r in out:
+        if isinstance(r, list): rows.extend(r)
+    return rows
+
+def deep_scrape_concurrent(company_urls: list[str], concurrency: int = 8) -> pd.DataFrame:
+    if not company_urls: return pd.DataFrame()
+    rows = asyncio.run(_deep_scrape_many(company_urls, concurrency=concurrency))
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows).drop_duplicates(subset=["link"])
+    cols = ["title","company","location","posted_date","tags","link","host","source",
+            "deadline","requirements","salary","education","remote","details"]
+    for c in cols:
+        if c not in df.columns: df[c] = None
+    return df[cols]
 
 def _is_candidate_link(text: str, url: str) -> bool:
     """Determine if a link is likely an internship/career posting"""
@@ -554,6 +580,97 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
 
     return results
 
+# --- NEW: concurrent deep scraping (Playwright async) ---
+async def _deep_scrape_one_async(pw, url: str, timeout_ms: int = DEEP_TIMEOUT_MS):
+    from bs4 import BeautifulSoup
+    results = []
+    browser = await pw.chromium.launch(
+        headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"]
+    )
+    ctx = await browser.new_context(user_agent=UA)
+    # Block heavy assets
+    await ctx.route(
+        "**/*",
+        lambda route: route.abort()
+        if route.request.resource_type in {"image", "media", "font", "stylesheet"}
+        else route.continue_(),
+    )
+    page = await ctx.new_page()
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        await page.wait_for_timeout(1200)
+        # Optional quick internship selectors
+        try:
+            await page.wait_for_selector(
+                "a:has-text('Intern'), [class*='intern' i], [data-automation-id*='intern' i]",
+                timeout=2000,
+            )
+        except Exception:
+            pass
+        html = await page.content()
+        soup = BeautifulSoup(html, "lxml")
+        for a in soup.find_all("a", href=True, limit=200):
+            txt = (a.get_text(" ", strip=True) or "").lower()
+            href = a["href"].strip()
+            full = urljoin(url, href)
+            if any(k in (txt + " " + href) for k in ["intern", "internship", "co-op", "student"]):
+                title = a.get_text(" ", strip=True)[:140] or "Internship"
+                results.append({
+                    "title": title,
+                    "company": _infer_company(full, title),
+                    "location": None,
+                    "posted_date": datetime.utcnow().date().isoformat(),
+                    "tags": None,
+                    "link": full,
+                    "host": urlparse(full).netloc,
+                    "source": url,
+                    "deadline": None,
+                    "requirements": None,
+                    "salary": None,
+                    "education": None,
+                    "remote": None,
+                    "details": "",
+                })
+    except Exception:
+        pass
+    finally:
+        await ctx.close()
+        await browser.close()
+    return results
+
+
+async def _deep_scrape_many(urls: list[str], concurrency: int = 8) -> list[dict]:
+    sem = asyncio.Semaphore(concurrency)
+    async with async_playwright() as pw:
+        async def bound(u):
+            async with sem:
+                return await _deep_scrape_one_async(pw, u)
+        tasks = [asyncio.create_task(bound(u)) for u in urls]
+        out = await asyncio.gather(*tasks, return_exceptions=True)
+    rows = []
+    for r in out:
+        if isinstance(r, list):
+            rows.extend(r)
+    return rows
+
+
+def deep_scrape_concurrent(company_urls: list[str], concurrency: int = 8) -> pd.DataFrame:
+    if not company_urls:
+        return pd.DataFrame()
+    rows = asyncio.run(_deep_scrape_many(company_urls, concurrency=concurrency))
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows).drop_duplicates(subset=["link"])
+    cols = [
+        "title","company","location","posted_date","tags","link","host","source",
+        "deadline","requirements","salary","education","remote","details",
+    ]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = None
+    return df[cols]
+
+
 # ---------- MAIN SCRAPER ----------
 def scrape_csusb_listings(
     url: str = CSUSB_CSE_URL,
@@ -595,10 +712,13 @@ def scrape_csusb_listings(
 
     if deep and csusb_links:
         company_urls = list({item["link"] for item in csusb_links})
-        
         if len(company_urls) > max_pages:
-            print(f"Limiting deep scrape to {max_pages} of {len(company_urls)} companies")
             company_urls = company_urls[:max_pages]
+
+        # NEW: concurrent pass (fast)
+        df_fast = deep_scrape_concurrent(company_urls, concurrency=8)
+        if not df_fast.empty:
+            all_results.extend(df_fast.to_dict("records"))
         
         print(f"Deep scraping {len(company_urls)} company career pages...")
         print(f"This will take approximately {len(company_urls) * 2} seconds...")
