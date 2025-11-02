@@ -114,21 +114,6 @@ else
   echo "Backend connectivity OK"
 fi
 
-echo "[3.5/4] Prewarming internship cache..."
-python - <<'PY'
-import os, pathlib
-from scraper import scrape_csusb_listings
-DATA_DIR = pathlib.Path("data"); DATA_DIR.mkdir(parents=True, exist_ok=True)
-PARQUET = DATA_DIR / "internships.parquet"
-# Only build if missing or stale (>6h)
-def stale(p): 
-    import time
-    return (not p.exists()) or (time.time() - p.stat().st_mtime > 6*3600)
-if stale(PARQUET):
-    df = scrape_csusb_listings(deep=True, max_pages=20)  # pick a reasonable batch
-    df.to_parquet(PARQUET, index=False)
-print("Cache ready at", PARQUET)
-PY
 # ============================================================================
 # 4. START STREAMLIT
 # ============================================================================
