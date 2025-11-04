@@ -92,4 +92,4 @@ For Streamlit:
 Open browser at https://sec.cse.csusb.edu/team2f25 
 
 ## Google Colab Notebook  
-[Open in Colab](https://colab.research.google.com/drive/1icOiUzhhm0l7PkDoCxUdDMqpX1eua8ug?usp=sharing)
+[Open in Colab](https://colab.research.google.com/drive/1ziLOvU7CpqMwhXzOjQ0TL9gU5D9jNCgo#scrollTo=CByYPUtDGy-L)
