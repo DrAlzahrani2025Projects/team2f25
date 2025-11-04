@@ -9,6 +9,8 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 # from streamlit import session_state as ss
+from llm_orchestrator import run_task
+import json
 
 import httpx
 
@@ -51,6 +53,11 @@ def ensure_ollama_ready():
         st.warning("Ollama isn't reachable; general chat may be slow or fail.")
 
 ensure_ollama_ready()
+
+if st.button("Run"):
+     with st.spinner("Working..."):
+         result = run_task(st.session_state.get("task_input") or default_task)
+     st.json(result)  # or render however you want
 
 
 # --- CSS injector ---

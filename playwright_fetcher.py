@@ -9,6 +9,8 @@ from urllib.parse import urljoin, urlparse
 
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
+from contextlib import contextmanager
+from playwright.sync_api import sync_playwright
 
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
@@ -183,7 +185,3 @@ def fetch_html_sync(url: str, timeout_ms: int = 15000, wait_ms: int = 2000) -> O
         return None
 
 
-async def _fetch_html_async(url: str, timeout_ms: int, wait_ms: int) -> Optional[str]:
-    """Internal async fetch function."""
-    fetcher = PlaywrightFetcher(timeout_ms, wait_ms)
-    return await fetcher.fetch_html(url)
