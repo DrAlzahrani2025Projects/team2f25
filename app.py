@@ -9,7 +9,7 @@ import streamlit as st
 # from streamlit import session_state as ss
 
 
-from llm import ensure_ollama_ready, llm_general_reply, llm_internship_search_directed, extract_preference_from_response
+from llm import initialize_llm, llm_query, ensure_ollama_ready, llm_general_reply, llm_internship_search_directed, extract_preference_from_response
 from scraper import scrape_csusb_listings
 from query_to_filter import classify_intent
 from ui import setup_ui, get_max_hops, get_mode, is_deep_mode, setup_session_states, render_msg, render_message_history, init_resume_ui
@@ -30,6 +30,8 @@ setup_ui(APP_TITLE)
 ensure_ollama_ready()
 
 setup_session_states(DATA_DIR)
+
+llm = initialize_llm()
 
 # ---------- Rate limit (10/min) ----------
 if "q_times" not in st.session_state:
@@ -85,7 +87,7 @@ def history_text(last_n: int = 8) -> str:
 init_resume_ui()
 
 # Chat input
-user_msg = st.chat_input("Type your question…")
+user_msg = st.chat_input(placeholder="Type your question…", accept_file=True, file_type=["docx", "pdf"])
 
 # Stop if no input
 if not user_msg:
@@ -93,8 +95,14 @@ if not user_msg:
 if not allow_query():
     st.stop()
 
-st.session_state.messages.append({"role": "user", "content": user_msg})
-render_msg("user", user_msg)
+render_msg("user", user_msg.text)
+
+with st.spinner("Thinking..."):
+    response = llm_query(llm, user_msg.text)
+
+render_msg("llm", response)
+st.rerun()
+
 
 # ---------- Routing ----------
 intent = classify_intent(user_msg)
