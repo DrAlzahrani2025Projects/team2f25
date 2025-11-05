@@ -58,6 +58,18 @@ ATS_HINTS = [
     "avature.net", "icims.com", "brassring.com"
 ]
 
+# Allowed domains whitelist for deep scraping to avoid straying from CSUSB scope
+ALLOWED_DOMAINS = {
+    urlparse(CSUSB_CSE_URL).netloc.lower(),
+    "workdayjobs.com", "myworkdayjobs.com", "greenhouse.io", "lever.co",
+    "taleo.net", "smartrecruiters.com", "icims.com", "brassring.com",
+    "successfactors.com", "avature.net", "eightfold.ai",
+}
+
+def _allowed_domain(url: str) -> bool:
+    domain = urlparse(url).netloc.lower()
+    return any(domain.endswith(ad) for ad in ALLOWED_DOMAINS)
+
 # ---------- LLM Integration (OpenAI) ----------
 def _extract_with_llm(html_snippet: str, url: str) -> Optional[Dict]:
     """Use OpenAI to extract structured internship data from HTML."""
@@ -117,9 +129,11 @@ def _extract_with_llm(html_snippet: str, url: str) -> Optional[Dict]:
         pass
     return None
 
+
 # ---------- helpers ----------
 def _clean(s: Optional[str]) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
+
 
 def _domain(u: str) -> str:
     try:
@@ -127,11 +141,13 @@ def _domain(u: str) -> str:
     except Exception:
         return ""
 
+
 def _normalize(u: str, base: str) -> str:
     try:
         return urljoin(base, u)
     except Exception:
         return u
+
 
 def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
     """Infer company name from URL or link text."""
@@ -159,6 +175,7 @@ def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
         pass
     return None
 
+
 def _is_candidate_link(text: str, url: str) -> bool:
     """Determine if a link is likely an internship/career posting."""
     low = f"{text} {url}".lower()
@@ -174,6 +191,7 @@ def _is_candidate_link(text: str, url: str) -> bool:
         return True
 
     return any(h in host or h in low for h in ALLOW_HOST_HINTS)
+
 
 def _collect_links(page_html: str, base: str) -> List[Dict]:
     """Collect internship candidate links from a page."""
@@ -217,6 +235,7 @@ def _collect_links(page_html: str, base: str) -> List[Dict]:
         seen.add(key)
 
     return rows
+
 
 # ---------- Deep-scrape a single page ----------
 def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]:
@@ -420,10 +439,12 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                                     "tags": None,
                                 })
                                 successful_extractions += 1
-                                print(f"      [{successful_extractions}] No link: {title[:60]}...")
+                                print(f"       [{successful_extractions}] No link: {title[:60]}...")
                             continue
 
                         abs_link = urljoin(url, link_href)
+                        if not _allowed_domain(abs_link):
+                            continue  # Skip URLs outside allowed domain whitelist
 
                         if abs_link in processed_urls:
                             continue
@@ -542,7 +563,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                         successful_extractions += 1
 
                         title_preview = base_result["title"][:60] + ("..." if len(base_result["title"]) > 60 else "")
-                        print(f"      [{successful_extractions}] {title_preview}")
+                        print(f"       [{successful_extractions}] {title_preview}")
 
                     except Exception as e:
                         print(f"    Error processing element {idx}: {str(e)[:50]}")
@@ -561,6 +582,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
         print(f"    ✗ Playwright error for {url}: {str(e)[:100]}")
 
     return results
+
 
 # ---------- MAIN SCRAPER ----------
 def scrape_csusb_listings(
@@ -656,267 +678,4 @@ def scrape_csusb_listings(
         pass
 
     print(f"\nTotal unique internships collected: {len(df)}")
-    return df[cols]
-
-# ---------- Company-specific finder ----------
-def quick_company_links_playwright(
-    company_token: str,
-    url: str = CSUSB_CSE_URL,
-    timeout_ms: int = TIMEOUT_MS,
-    deep: bool = True
-) -> pd.DataFrame:
-    """Find and optionally deep-scrape links for a specific company."""
-    token = (company_token or "").strip().lower()
-    if not token:
-        return pd.DataFrame()
-
-    print(f"\n🔍 Searching for {company_token} internships...")
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
-        ctx = browser.new_context(user_agent=UA, viewport={"width": 1280, "height": 720})
-        page = ctx.new_page()
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        soup = BeautifulSoup(page.content() or "", "lxml")
-        browser.close()
-
-    main = soup.find("main") or soup
-    rows: List[Dict] = []
-    seen: set[tuple[str, str]] = set()
-    company_urls: List[str] = []
-
-    for a in main.find_all("a", href=True):
-        text = _clean(a.get_text(" ", strip=True))
-        if not text:
-            continue
-
-        href = a["href"]
-        abs_url = urljoin(url, href)
-        host = urlparse(abs_url).netloc.lower()
-        key = (text.lower(), abs_url)
-
-        if key in seen:
-            continue
-
-        if token in text.lower() or token in host:
-            company_urls.append(abs_url)
-            rows.append({
-                "title": text,
-                "company": _infer_company(abs_url, text) or company_token,
-                "location": None,
-                "posted_date": datetime.utcnow().date().isoformat(),
-                "tags": None,
-                "link": abs_url,
-                "host": host,
-                "source": url,
-                "deadline": None,
-                "requirements": None,
-                "salary": None,
-                "education": None,
-                "remote": None,
-                "details": None,
-            })
-            seen.add(key)
-
-    if not company_urls:
-        print(f"  No links found on CSUSB page, trying direct company URLs...")
-
-        company_clean = re.sub(r"[^a-z0-9]", "", token.lower())
-        potential_urls = [
-            f"https://careers.{company_clean}.com",
-            f"https://www.{company_clean}.com/careers",
-            f"https://www.{company_clean}.com/careers/students",
-            f"https://jobs.{company_clean}.com",
-            f"https://{company_clean}.com/careers",
-            f"https://careers.{token.replace(' ', '')}.com/students",
-            f"https://{token.replace(' ', '')}.wd1.myworkdayjobs.com",
-            f"https://{company_clean}.wd5.myworkdayjobs.com",
-        ]
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
-            ctx = browser.new_context(user_agent=UA, viewport={"width": 1280, "height": 720})
-            page = ctx.new_page()
-
-            for test_url in potential_urls[:5]:
-                try:
-                    print(f"  Trying: {test_url}")
-                    response = page.goto(test_url, wait_until="domcontentloaded", timeout=10000)
-                    if response and response.status < 400:
-                        print(f"  ✓ Found: {test_url}")
-                        company_urls.append(test_url)
-                        break
-                except Exception:
-                    continue
-
-            browser.close()
-
-    if not company_urls:
-        print(f"  ✗ Could not find career page for {company_token}")
-        return pd.DataFrame()
-
-    print(f"  Found {len(company_urls)} career page(s)")
-
-    if deep and company_urls:
-        print(f"  Deep scraping {len(company_urls)} page(s)...")
-        for idx, company_url in enumerate(company_urls[:5], 1):
-            print(f"  [{idx}/{len(company_urls[:5])}] Scraping: {company_url}")
-            deep_results = _deep_scrape_page(company_url)
-
-            for result in deep_results:
-                if isinstance(result, dict):
-                    result["company"] = result.get("company") or company_token
-                    rows.append(result)
-
-    if not rows:
-        print(f"  ✗ No internships found for {company_token}")
-        return pd.DataFrame()
-
-    cols = [
-        "title", "company", "location", "posted_date", "tags", "link", "host", "source",
-        "deadline", "requirements", "salary", "education", "remote", "details",
-    ]
-
-    df = pd.DataFrame(rows)
-    for c in cols:
-        if c not in df.columns:
-            df[c] = None
-
-    df = df.drop_duplicates(subset=["link"], keep="first")
-
-    print(f"  ✓ Total internships found: {len(df)}")
-    return df[cols]
-
-# ---------- Deep company crawler ----------
-@dataclass
-class ScrapeResult:
-    title: str
-    company: str
-    location: str
-    link: str
-    posted_date: Optional[str]
-    remote: Optional[str]
-    host: str
-    source: str
-    details: str
-
-def _looks_like_intern_title(txt: str) -> bool:
-    return bool(INTERNSHIP_TERMS.search(txt or ""))
-
-def deep_scrape_company_careers(
-    company: str,
-    seed_links: Optional[Iterable[str]] = None,
-    max_pages: int = 60,
-    wait_ms: int = 400,
-    timeout_ms: int = 20000,
-) -> pd.DataFrame:
-    """Headless crawl starting from the company's known careers page(s)."""
-    company = (company or "").strip()
-    if not company:
-        return pd.DataFrame()
-
-    seeds = set([*(seed_links or [])])
-    try:
-        df_seed = quick_company_links_playwright(company, deep=False)
-        for u in (df_seed["link"].tolist() if isinstance(df_seed, pd.DataFrame) and "link" in df_seed.columns else []):
-            seeds.add(u)
-    except Exception:
-        pass
-
-    if not seeds:
-        guesses = [
-            f"https://careers.{company.replace(' ', '')}.com",
-            f"https://www.{company.replace(' ', '')}.com/careers",
-            f"https://www.{company.replace(' ', '')}.com/careers/students",
-            f"https://www.{company.replace(' ', '')}.com/careers/early-careers",
-        ]
-        seeds.update(guesses)
-
-    results: list[ScrapeResult] = []
-    seen_urls: set[str] = set()
-    queued: list[str] = [u for u in seeds if u.startswith("http")]
-    start_domains = {_domain(u) for u in queued if _domain(u)}
-
-    brand = re.sub(r"[^a-z]", "", company.lower())
-
-    def same_brand(domain: str) -> bool:
-        d = (domain or "").lower()
-        return bool(brand and (brand in d or d.replace("chase", "") in brand or brand.replace("chase", "") in d))
-
-    def should_visit(u: str) -> bool:
-        d = _domain(u)
-        if not d:
-            return False
-        if d in start_domains or same_brand(d):
-            return True
-        return any(h in d for h in ATS_HINTS)
-
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
-        ctx = browser.new_context(ignore_https_errors=True, user_agent=UA)
-        page = ctx.new_page()
-
-        try:
-            while queued and len(seen_urls) < max_pages:
-                url = queued.pop(0)
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
-                try:
-                    page.goto(url, timeout=timeout_ms)
-
-                    actual = page.url
-                    ad = _domain(actual)
-                    if ad and ad not in start_domains:
-                        start_domains.add(ad)
-
-                    page.wait_for_timeout(wait_ms)
-
-                    host = _domain(url)
-                    anchors = page.query_selector_all("a")
-                    candidates: list[tuple[str, str]] = []
-
-                    for a in anchors:
-                        try:
-                            txt = (a.inner_text() or "").strip()
-                            href = (a.get_attribute("href") or "").strip()
-                        except Exception:
-                            continue
-                        if not href:
-                            continue
-                        full = _normalize(href, url)
-                        if _looks_like_intern_title(txt) or _looks_like_intern_title(full):
-                            candidates.append((txt, full))
-
-                        if should_visit(full) and full not in seen_urls and len(queued) + len(seen_urls) < max_pages:
-                            queued.append(full)
-
-                    for txt, link in candidates:
-                        title = txt or "Internship"
-                        results.append(ScrapeResult(
-                            title=title,
-                            company=company,
-                            location="",
-                            link=link,
-                            posted_date=None,
-                            remote=None,
-                            host=host,
-                            source=url,
-                            details="",
-                        ))
-
-                except Exception:
-                    continue
-        finally:
-            ctx.close()
-            browser.close()
-
-    if not results:
-        return pd.DataFrame()
-
-    df = pd.DataFrame([r.__dict__ for r in results]).drop_duplicates(subset=["link"])
-    cols = ["title", "company", "location", "posted_date", "remote", "host", "link", "source", "details"]
-    for c in cols:
-        if c not in df.columns:
-            df[c] = None
     return df[cols]

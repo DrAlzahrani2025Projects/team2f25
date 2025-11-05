@@ -26,6 +26,20 @@ DATA_DIR = Path("data")
 PARQUET_PATH = DATA_DIR / "internships.parquet"
 CHAT_API_URL = os.getenv("CHAT_API_URL", "http://localhost:8000")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+def some_api_call(query: str):
+    with httpx.Client() as client:
+        r = client.post(
+            f"{BACKEND_URL}/navigate",
+            json={
+                "start_url": "https://www.csusb.edu/cse/internships-careers",
+                "query": query,
+                "max_hops": 40
+            },
+            timeout=60
+        )
+        r.raise_for_status()
+        return r.json()
+
 
 # ---------- Page setup ----------
 st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
@@ -34,7 +48,7 @@ st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
 def backend_ok() -> bool:
     try:
         with httpx.Client(timeout=5.0) as client:
-            r = client.get(f"{BACKEND_URL}/healthz")
+            r = client.get(f"{BACKEND_URL}/health")
             return r.status_code == 200
     except Exception:
         return False
@@ -170,12 +184,12 @@ def backend_complete(
     max_tokens: int = 400
 ) -> str:
     """
-    Call the backend /chat/complete endpoint (OpenAI under the hood).
+    Call the backend chat completion endpoint on CHAT_API_URL.
     """
     try:
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
-                f"{BACKEND_URL}/chat/complete",
+                f"{CHAT_API_URL}/chat/complete",
                 json={
                     "prompt": prompt,
                     "system_prompt": system_prompt,
@@ -205,7 +219,7 @@ def llm_general_reply(user_text: str) -> str:
             "max_tokens": 220,
         }
         with httpx.Client(timeout=60.0) as client:
-            r = client.post(f"{CHAT_API_URL}/chat/complete", json=body)
+            r = client.post(f"{CHAT_API_URL}/chat/complete", json=body)  # Use CHAT_API_URL and /chat/complete
             r.raise_for_status()
             return (r.json().get("response") or "").strip()
     except Exception as e:
@@ -245,8 +259,7 @@ def extract_preference_from_response(user_response: str, pref_key: str) -> List[
 # ---------- Backend navigation request ----------
 def navigate_career_page(company_url: str, query: str) -> dict:
     """
-    Send navigation request to backend.
-    Backend will use LLM to navigate the career page until it finds job listings.
+    Send navigation request to BACKEND_URL.
     """
     try:
         with httpx.Client(timeout=120.0) as client:
@@ -255,7 +268,7 @@ def navigate_career_page(company_url: str, query: str) -> dict:
                 json={
                     "start_url": company_url,
                     "query": query,
-                    "max_hops": max_hops
+                    "max_hops": 40  # Change if you have a slider variable
                 }
             )
             response.raise_for_status()
@@ -409,7 +422,7 @@ def llm_internship_search_directed(
 
         progress_bar.progress(int((idx - 1) / len(companies_to_navigate) * 100))
 
-        nav_result = navigate_career_page(company_url, user_text)
+        nav_result = navigate_career_page(company_url, query)
 
         found_links = nav_result.get("found_links", [])
         visited_urls = nav_result.get("visited_urls", [])
@@ -552,15 +565,19 @@ with st.sidebar:
 # Chat input
 user_msg = st.chat_input("Type your question…")
 
-# Stop if no input
 if not user_msg:
     st.stop()
 if not allow_query():
     st.stop()
 
-# Record user message
 st.session_state.messages.append({"role": "user", "content": user_msg})
 render_msg("user", user_msg)
+
+query = user_msg.strip()
+if not query or query.lower() in ["hi", "hello", "hey"]:
+    query = "show all internships"
+
+
 
 # ---------- Routing ----------
 txt_lo = user_msg.lower()
@@ -618,7 +635,7 @@ if route == "general":
 if not st.session_state.get("collecting_prefs"):
     st.session_state.collecting_prefs = True
     st.session_state.current_pref_step = 0
-    st.session_state.initial_query = user_msg
+    st.session_state.initial_query = query
     st.session_state.user_preferences = {}
 
 # Check if we're still collecting preferences
@@ -669,10 +686,11 @@ if csusb_df.empty or need_refresh:
 
 # LLM decides which companies to navigate based on preferences, backend navigates them
 user_prefs = st.session_state.get("user_preferences", {})
-initial_query = st.session_state.get("initial_query", user_msg)
+initial_query = st.session_state.get("initial_query", query)
+
 
 with st.spinner("Searching for internships matching your preferences..."):
-    answer_md, results_df = llm_internship_search_directed(initial_query, csusb_df, user_prefs)
+   answer_md, results_df = llm_internship_search_directed(query, csusb_df, user_prefs)
 
 render_msg("assistant", answer_md)
 st.session_state.messages.append({"role": "assistant", "content": answer_md})
