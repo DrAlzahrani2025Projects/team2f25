@@ -1,128 +1,134 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Set defaults for all environment variables
+# ==========================
+# Config (with sensible defaults)
+# ==========================
 export STREAMLIT_SERVER_PORT="${STREAMLIT_SERVER_PORT:-5002}"
 export STREAMLIT_SERVER_BASE_URL_PATH="${STREAMLIT_SERVER_BASE_URL_PATH:-team2f25}"
-export MODEL_NAME="${MODEL_NAME:-qwen2.5:0.5b}"
-export OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
-export BACKEND_PORT="${BACKEND_PORT:-8000}"
 
-if command -v sed >/dev/null 2>&1; then
-  sed -i 's/\r$//' entrypoint.sh || true
-fi
+# Backends: chat (main.py) on 8000, navigator (backend_navigator.py) on 8001
+export BACKEND_CHAT_PORT="${BACKEND_CHAT_PORT:-8000}"
+export BACKEND_NAV_PORT="${BACKEND_NAV_PORT:-8001}"
 
-echo "=== CSUSB Internship Finder - Startup ==="
-echo "OLLAMA_HOST: $OLLAMA_HOST"
-echo "MODEL_NAME: $MODEL_NAME"
-echo "BACKEND_PORT: $BACKEND_PORT"
-echo "STREAMLIT_PORT: $STREAMLIT_SERVER_PORT"
-echo ""
+# Where Streamlit should call for navigation
+export BACKEND_URL="${BACKEND_URL:-http://localhost:${BACKEND_NAV_PORT}}"
 
-# ============================================================================
-# 1. START OLLAMA
-# ============================================================================
-echo "[1/4] Checking Ollama..."
-if command -v ollama >/dev/null 2>&1; then
-  echo "Ollama found. Starting service..."
-  (ollama serve >/tmp/ollama.log 2>&1 &) || true
-  sleep 3
-  
-  echo "Waiting for Ollama to be ready..."
-  MAX_RETRIES=30
-  RETRY=0
-  while [ $RETRY -lt $MAX_RETRIES ]; do
-    if curl -s "${OLLAMA_HOST}/api/tags" >/dev/null 2>&1; then
-      echo "Ollama is ready!"
-      break
+# LLM settings (OpenAI)
+export LLM_PROVIDER="${LLM_PROVIDER:-openai}"
+export LLM_MODEL="${LLM_MODEL:-gpt-4o-mini}"
+
+# ==========================
+# Helpers
+# ==========================
+wait_for_http() {
+  # wait_for_http <url> <timeout_seconds>
+  local url="$1"
+  local timeout="${2:-30}"
+  local t=0
+  while [ "$t" -lt "$timeout" ]; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
     fi
-    echo "  Retry $((RETRY+1))/$MAX_RETRIES..."
     sleep 1
-    RETRY=$((RETRY+1))
+    t=$((t+1))
   done
-  
-  if [ $RETRY -ge $MAX_RETRIES ]; then
-    echo "ERROR: Ollama failed to start"
-    cat /tmp/ollama.log
-    exit 1
+  return 1
+}
+
+graceful_shutdown() {
+  echo "Shutting down..."
+  # Kill backends if running
+  if [ -n "${CHAT_PID:-}" ] && kill -0 "$CHAT_PID" 2>/dev/null; then
+    kill "$CHAT_PID" 2>/dev/null || true
   fi
-  
-  # Pull model if needed
-  if ! curl -s "${OLLAMA_HOST}/api/tags" | grep -q "\"name\":\"${MODEL_NAME}\""; then
-    echo "Pulling model: $MODEL_NAME"
-    ollama pull "${MODEL_NAME}" || {
-      echo "ERROR: Failed to pull model"
-      exit 1
-    }
-  else
-    echo "Model $MODEL_NAME already available"
+  if [ -n "${NAV_PID:-}" ] && kill -0 "$NAV_PID" 2>/dev/null; then
+    kill "$NAV_PID" 2>/dev/null || true
   fi
+}
+trap graceful_shutdown EXIT
+
+# ==========================
+# Banner
+# ==========================
+echo "================= Startup ================="
+echo " Streamlit:       http://localhost:${STREAMLIT_SERVER_PORT}/${STREAMLIT_SERVER_BASE_URL_PATH}"
+echo " Chat API:        http://localhost:${BACKEND_CHAT_PORT} (main.py)"
+echo " Navigator API:   http://localhost:${BACKEND_NAV_PORT} (backend_navigator.py)"
+echo " BACKEND_URL:     ${BACKEND_URL}"
+echo " LLM_PROVIDER:    ${LLM_PROVIDER}"
+echo " LLM_MODEL:       ${LLM_MODEL}"
+echo "===================================================="
+echo
+
+# ==========================
+# Start chat API (main.py) on 8000
+# ==========================
+echo "[1/3] Starting chat API (main.py) on :${BACKEND_CHAT_PORT} ..."
+( python -m uvicorn main:app \
+    --host 0.0.0.0 \
+    --port "${BACKEND_CHAT_PORT}" \
+    --log-level info \
+  > /tmp/main.log 2>&1 ) &
+CHAT_PID=$!
+echo "  → main.py PID=${CHAT_PID}"
+
+# ==========================
+# Start navigator API (backend_navigator.py) on 8001
+# ==========================
+echo "[2/3] Starting navigator API (backend_navigator.py) on :${BACKEND_NAV_PORT} ..."
+( python -m uvicorn backend_navigator:app \
+    --host 0.0.0.0 \
+    --port "${BACKEND_NAV_PORT}" \
+    --log-level info \
+  > /tmp/navigator.log 2>&1 ) &
+NAV_PID=$!
+echo "  → navigator PID=${NAV_PID}"
+
+# ==========================
+# Health checks (non-fatal if chat fails; required for navigator)
+# ==========================
+echo
+echo "Waiting for backends to become healthy..."
+
+CHAT_HEALTH_URL="http://localhost:${BACKEND_CHAT_PORT}/healthz"
+NAV_HEALTH_URL="http://localhost:${BACKEND_NAV_PORT}/health"
+
+CHAT_OK=false
+if wait_for_http "$CHAT_HEALTH_URL" 30; then
+  CHAT_OK=true
+  echo "  ✓ Chat API healthy: ${CHAT_HEALTH_URL}"
 else
-  echo "WARNING: Ollama not found. Backend will fail to connect."
+  echo "  ✗ Chat API failed health check: ${CHAT_HEALTH_URL}"
+  if [ -f /tmp/main.log ]; then
+    echo "  --- Last lines of /tmp/main.log ---"
+    tail -n 60 /tmp/main.log || true
+    echo "  ----------------------------------"
+  fi
+  # Do NOT exit; continue with navigator + Streamlit
 fi
 
-# ============================================================================
-# 2. START BACKEND
-# ============================================================================
-echo ""
-echo "[2/4] Starting backend navigator..."
-python -m uvicorn backend_navigator:app \
-  --host 0.0.0.0 \
-  --port "$BACKEND_PORT" \
-  --log-level info \
-  >/tmp/backend.log 2>&1 &
-
-BACKEND_PID=$!
-echo "Backend started with PID: $BACKEND_PID"
-
-# Wait for backend to be ready
-echo "Waiting for backend to be ready..."
-MAX_RETRIES=30
-RETRY=0
-while [ $RETRY -lt $MAX_RETRIES ]; do
-  if curl -s "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1; then
-    echo "Backend is ready!"
-    break
+if ! wait_for_http "$NAV_HEALTH_URL" 40; then
+  echo "  ✗ Navigator API failed health check: ${NAV_HEALTH_URL}"
+  if [ -f /tmp/navigator.log ]; then
+    echo "  --- Last lines of /tmp/navigator.log ---"
+    tail -n 80 /tmp/navigator.log || true
+    echo "  ----------------------------------------"
   fi
-  echo "  Retry $((RETRY+1))/$MAX_RETRIES..."
-  sleep 1
-  RETRY=$((RETRY+1))
-done
-
-if [ $RETRY -ge $MAX_RETRIES ]; then
-  echo "ERROR: Backend failed to start"
-  cat /tmp/backend.log
-  kill $BACKEND_PID 2>/dev/null || true
+  echo "Navigator is required. Exiting."
   exit 1
 fi
+echo "  ✓ Navigator healthy: ${NAV_HEALTH_URL}"
 
-# ============================================================================
-# 3. TEST BACKEND CONNECTIVITY
-# ============================================================================
-echo ""
-echo "[3/4] Testing backend connectivity..."
-RESPONSE=$(curl -s -X POST "http://localhost:${BACKEND_PORT}/fetch" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.google.com"}' 2>&1 || echo "FAILED")
+echo
+echo "[3/3] Starting Streamlit on :${STREAMLIT_SERVER_PORT}"
+echo "Open: http://localhost:${STREAMLIT_SERVER_PORT}/${STREAMLIT_SERVER_BASE_URL_PATH}"
+echo
 
-if echo "$RESPONSE" | grep -q "FAILED\|error\|refused"; then
-  echo "ERROR: Backend is not responding correctly"
-  echo "Response: $RESPONSE"
-  kill $BACKEND_PID 2>/dev/null || true
-  exit 1
-else
-  echo "Backend connectivity OK"
-fi
-
-# ============================================================================
-# 4. START STREAMLIT
-# ============================================================================
-echo ""
-echo "[4/4] Starting Streamlit..."
-echo "Access the app at: http://localhost:${STREAMLIT_SERVER_PORT}/${STREAMLIT_SERVER_BASE_URL_PATH}"
-echo ""
-
+# ==========================
+# Run Streamlit (PID 1 replacement)
+# ==========================
 exec streamlit run app.py \
-  --server.port "$STREAMLIT_SERVER_PORT" \
-  --server.baseUrlPath "$STREAMLIT_SERVER_BASE_URL_PATH" \
+  --server.port "${STREAMLIT_SERVER_PORT}" \
+  --server.baseUrlPath "${STREAMLIT_SERVER_BASE_URL_PATH}" \
   --browser.gatherUsageStats false

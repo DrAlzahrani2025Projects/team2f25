@@ -14,4 +14,6 @@ uvicorn
 fastapi
 pydantic
 httpx
-openai>=1.51.0
+openai>=1.0.0
+slowapi==0.1.9
+limits>=3.0

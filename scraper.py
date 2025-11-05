@@ -13,6 +13,15 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
+# Use your OpenAI helper (no Ollama)
+try:
+    from llm_provider import get_openai_client, get_model
+    _OPENAI_READY = True
+except Exception:
+    _OPENAI_READY = False
+    get_openai_client = None  # type: ignore
+    get_model = lambda: "gpt-4o-mini"  # type: ignore
+
 # ---------- constants ----------
 CSUSB_CSE_URL = "https://www.csusb.edu/cse/internships-careers"
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36"
@@ -49,67 +58,63 @@ ATS_HINTS = [
     "avature.net", "icims.com", "brassring.com"
 ]
 
-# ---------- LLM Integration ----------
+# ---------- LLM Integration (OpenAI) ----------
 def _extract_with_llm(html_snippet: str, url: str) -> Optional[Dict]:
-    """Use Ollama LLM to extract structured internship data from HTML"""
+    """Use OpenAI to extract structured internship data from HTML."""
+    if not _OPENAI_READY:
+        return None
     try:
-        from langchain_ollama import ChatOllama
-        from langchain.prompts import ChatPromptTemplate
+        client = get_openai_client()
+        model = get_model()
 
-        llm = ChatOllama(
-            base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
-            model=os.getenv("MODEL_NAME", "qwen2.5:0.5b"),
-            temperature=0.05,
-            streaming=False,
-            model_kwargs={"num_ctx": 3072, "num_predict": 350},
+        system_prompt = (
+            "You are a data extraction assistant specializing in job postings. "
+            "Extract internship information from HTML content.\n"
+            "Return ONLY valid JSON with these fields (omit null/empty fields):\n"
+            "{\n"
+            '  "title": "exact job title as shown",\n'
+            '  "company": "company name",\n'
+            '  "location": "city, state OR remote",\n'
+            '  "posted_date": "YYYY-MM-DD or relative like \'2 days ago\'",\n'
+            '  "deadline": "application deadline if mentioned",\n'
+            '  "requirements": "key requirements (under 100 chars)",\n'
+            '  "salary": "salary/stipend range if mentioned",\n'
+            '  "education": "Bachelor\'s, Master\'s, etc.",\n'
+            '  "remote": "Remote, Hybrid, or On-site",\n'
+            '  "details": "brief 1-2 sentence description"\n'
+            "}\n"
+            "If no clear internship data found, return {}.\n"
+            "Be precise. Extract only what's explicitly shown."
         )
 
-        system_prompt = """You are a data extraction assistant specializing in job postings. Extract internship information from HTML content.
-Return ONLY valid JSON with these fields (omit null/empty fields):
-{{{{
-  "title": "exact job title as shown",
-  "company": "company name",
-  "location": "city, state OR remote",
-  "posted_date": "YYYY-MM-DD or relative like '2 days ago'",
-  "deadline": "application deadline if mentioned",
-  "requirements": "key requirements (under 100 chars)",
-  "salary": "salary/stipend range if mentioned",
-  "education": "Bachelor's, Master's, etc.",
-  "remote": "Remote, Hybrid, or On-site",
-  "details": "brief 1-2 sentence description"
-}}}}
+        truncated = (html_snippet or "")[:2200]
+        user_prompt = f"HTML:\n{truncated}\n\nURL: {url}\n\nExtract internship data:"
 
-If no clear internship data found, return {{{{}}}}
-Be precise. Extract only what's explicitly shown."""
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "HTML:\n{html}\n\nURL: {url}\n\nExtract internship data:")
-        ])
-
-        truncated = html_snippet[:2200]
-        response = (prompt | llm).invoke({"html": truncated, "url": url})
-
-        content = response.content.strip()
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.05,
+            max_tokens=350,
+        )
+        content = (resp.choices[0].message.content or "").strip()
         json_match = re.search(r"\{[\s\S]*?\}", content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            data = json.loads(json_str)
-            
-            if data and isinstance(data, dict):
-                if data.get("title") and len(str(data.get("title")).strip()) > 5:
-                    for key in list(data.keys()):
-                        if data[key] in [None, "", "null", "None"]:
-                            del data[key]
-                        elif isinstance(data[key], str):
-                            data[key] = data[key].strip()
-                    return data
-                    
-    except json.JSONDecodeError:
-        pass
+        if not json_match:
+            return None
+
+        data = json.loads(json_match.group(0))
+        if isinstance(data, dict) and (data.get("title") and len(str(data.get("title")).strip()) > 5):
+            # Clean trivial empties
+            clean: Dict[str, Optional[str]] = {}
+            for k, v in data.items():
+                if v in (None, "", "null", "None"):
+                    continue
+                clean[k] = v.strip() if isinstance(v, str) else v
+            return clean  # type: ignore[return-value]
     except Exception:
         pass
-    
     return None
 
 # ---------- helpers ----------
@@ -129,7 +134,7 @@ def _normalize(u: str, base: str) -> str:
         return u
 
 def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
-    """Infer company name from URL or link text"""
+    """Infer company name from URL or link text."""
     try:
         host = urlparse(abs_url).netloc.lower().replace("www.", "")
         parts = host.split(".")
@@ -144,7 +149,10 @@ def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
                 return core.capitalize()
 
         if text:
-            match = re.search(r"^([A-Z][a-zA-Z\s&\.]+?)(?:\s*[-—–]\s*(?:Careers?|Jobs?|Internships?))?$", text)
+            match = re.search(
+                r"^([A-Z][a-zA-Z\s&\.]+?)(?:\s*[-—–]\s*(?:Careers?|Jobs?|Internships?))?$",
+                text,
+            )
             if match:
                 return match.group(1).strip()
     except Exception:
@@ -152,7 +160,7 @@ def _infer_company(abs_url: str, text: str = "") -> Optional[str]:
     return None
 
 def _is_candidate_link(text: str, url: str) -> bool:
-    """Determine if a link is likely an internship/career posting"""
+    """Determine if a link is likely an internship/career posting."""
     low = f"{text} {url}".lower()
 
     if any(k in low for k in JUNK_KEYWORDS):
@@ -168,10 +176,11 @@ def _is_candidate_link(text: str, url: str) -> bool:
     return any(h in host or h in low for h in ALLOW_HOST_HINTS)
 
 def _collect_links(page_html: str, base: str) -> List[Dict]:
-    """Collect internship candidate links from a page"""
-    soup = BeautifulSoup(page_html, "lxml")
+    """Collect internship candidate links from a page."""
+    soup = BeautifulSoup(page_html or "", "lxml")
     main = soup.find("main") or soup
-    rows, seen = [], set()
+    rows: List[Dict] = []
+    seen: set[tuple[str, str]] = set()
 
     for a in main.find_all("a", href=True):
         text = _clean(a.get_text(" ", strip=True))
@@ -218,7 +227,11 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                args=[
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                ],
             )
             ctx = browser.new_context(user_agent=UA, viewport={"width": 1920, "height": 1080})
 
@@ -227,8 +240,9 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                     return True
                 return any(b in u for b in ["analytics", "doubleclick", "tracking", "facebook", "twitter"])
 
-            ctx.route("**/*", lambda route, req:
-                route.abort() if _should_block(req.url, req.resource_type) else route.continue_()
+            ctx.route(
+                "**/*",
+                lambda route, req: route.abort() if _should_block(req.url, req.resource_type) else route.continue_(),
             )
 
             page = ctx.new_page()
@@ -251,7 +265,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                     "input[type='checkbox'][value*='intern' i]",
                     "input[type='radio'][value*='intern' i]",
                 ]
-                
+
                 for selector in filter_selectors:
                     try:
                         elements = page.query_selector_all(selector)
@@ -291,7 +305,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                 wait_selectors = [
                     "a[href*='job']", "a[href*='position']", ".job-card",
                     "[class*='job']", "[data-automation-id*='job']",
-                    ".listing", ".opportunity"
+                    ".listing", ".opportunity",
                 ]
                 for selector in wait_selectors:
                     try:
@@ -302,11 +316,11 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
 
                 time.sleep(1)
                 html_content = page.content()
-                soup = BeautifulSoup(html_content, "lxml")
+                soup = BeautifulSoup(html_content or "", "lxml")
 
                 # Find job listing containers
-                job_elements = []
-                
+                job_elements: List[BeautifulSoup] = []
+
                 # Structured containers
                 container_selectors = [
                     {"class": re.compile(r"job.*card|position.*card|listing.*item|opportunity|opening", re.I)},
@@ -315,7 +329,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                     {"id": re.compile(r"job.*list|position.*list|career.*list", re.I)},
                     {"class": re.compile(r"result|item", re.I)},
                 ]
-                
+
                 for selector in container_selectors:
                     found = soup.find_all(["div", "li", "article", "section", "tr"], selector, limit=100)
                     for elem in found:
@@ -325,8 +339,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                             job_elements.append(elem)
 
                 # Table rows
-                tables = soup.find_all("table")
-                for table in tables:
+                for table in soup.find_all("table"):
                     rows = table.find_all("tr")[1:]
                     for row in rows[:100]:
                         text = row.get_text(" ", strip=True).lower()
@@ -337,38 +350,34 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                 # Direct links with internship keywords
                 all_links = soup.find_all("a", href=True, limit=200)
                 for link in all_links:
-                    text = link.get_text(" ", strip=True).lower()
-                    href = link.get("href", "").lower()
-                    parent_text = ""
-                    
+                    text_l = link.get_text(" ", strip=True).lower()
+                    href_l = (link.get("href") or "").lower()
                     parent = link.parent
-                    if parent:
-                        parent_text = parent.get_text(" ", strip=True).lower()
-                    
-                    if any(kw in text or kw in href or kw in parent_text for kw in INTERNSHIP_INDICATORS):
-                        if parent and len(parent_text) > len(text) and len(parent_text) < 500:
+                    parent_text = parent.get_text(" ", strip=True).lower() if parent else ""
+
+                    if any(kw in text_l or kw in href_l or kw in parent_text for kw in INTERNSHIP_INDICATORS):
+                        if parent and len(parent_text) > len(text_l) and len(parent_text) < 500:
                             job_elements.append(parent)
                         else:
                             job_elements.append(link)
 
-                # Deduplicate
-                seen_elements = set()
+                # Deduplicate element identities
+                seen_elements: set[int] = set()
                 unique_elements = []
                 for elem in job_elements:
-                    elem_id = id(elem)
-                    if elem_id not in seen_elements:
-                        seen_elements.add(elem_id)
+                    eid = id(elem)
+                    if eid not in seen_elements:
+                        seen_elements.add(eid)
                         unique_elements.append(elem)
-                
                 job_elements = unique_elements
 
                 print(f"    Found {len(job_elements)} potential job elements")
 
                 # Process elements
-                processed_urls = set()
+                processed_urls: set[str] = set()
                 company_name = _infer_company(url)
                 successful_extractions = 0
-                
+
                 for idx, element in enumerate(job_elements[:50], 1):
                     try:
                         elem_text = element.get_text(" ", strip=True)
@@ -376,22 +385,22 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
 
                         has_intern_mention = any(ind in elem_text_lower for ind in INTERNSHIP_INDICATORS)
                         has_intern_in_href = False
-                        
-                        link = None
-                        if element.name == "a":
-                            link = element.get("href")
-                            if link:
-                                has_intern_in_href = any(ind in link.lower() for ind in INTERNSHIP_INDICATORS)
+
+                        link_href: Optional[str] = None
+                        if getattr(element, "name", "") == "a":
+                            link_href = element.get("href")
+                            if link_href:
+                                has_intern_in_href = any(ind in link_href.lower() for ind in INTERNSHIP_INDICATORS)
                         else:
                             link_elem = element.find("a", href=True)
                             if link_elem:
-                                link = link_elem.get("href")
-                                if link:
-                                    has_intern_in_href = any(ind in link.lower() for ind in INTERNSHIP_INDICATORS)
+                                link_href = link_elem.get("href")
+                                if link_href:
+                                    has_intern_in_href = any(ind in link_href.lower() for ind in INTERNSHIP_INDICATORS)
 
                         is_internship = has_intern_mention or has_intern_in_href
 
-                        if not link:
+                        if not link_href:
                             if is_internship and len(elem_text) > 20:
                                 title = elem_text[:150] if len(elem_text) > 150 else elem_text
                                 results.append({
@@ -414,7 +423,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                                 print(f"      [{successful_extractions}] No link: {title[:60]}...")
                             continue
 
-                        abs_link = urljoin(url, link)
+                        abs_link = urljoin(url, link_href)
 
                         if abs_link in processed_urls:
                             continue
@@ -424,27 +433,26 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                             continue
 
                         # Extract title
-                        title = None
-                        
+                        title: Optional[str] = None
                         title_tags = element.find_all(["h1", "h2", "h3", "h4", "h5", "span", "a", "div"], limit=15)
                         for tag in title_tags:
-                            text = tag.get_text(" ", strip=True)
-                            if text and 5 < len(text) < 200:
-                                if not title or any(kw in text.lower() for kw in ["intern", "co-op", "student", "graduate", "entry"]):
-                                    title = text
-                                    if any(kw in text.lower() for kw in ["intern", "co-op"]):
+                            t = tag.get_text(" ", strip=True)
+                            if t and 5 < len(t) < 200:
+                                if (not title) or any(kw in t.lower() for kw in ["intern", "co-op", "student", "graduate", "entry"]):
+                                    title = t
+                                    if any(kw in t.lower() for kw in ["intern", "co-op"]):
                                         break
-                        
+
                         if not title:
                             for tag in title_tags:
-                                title_attr = tag.get("aria-label") or tag.get("title")
-                                if title_attr and len(title_attr) > 5:
-                                    title = title_attr
+                                t_attr = tag.get("aria-label") or tag.get("title")
+                                if t_attr and len(t_attr) > 5:
+                                    title = t_attr
                                     break
-                        
+
                         if not title:
                             title = elem_text[:100] if elem_text else "Internship Position"
-                        
+
                         # Filter junk titles
                         title_lower = title.lower()
                         junk_titles = {
@@ -455,14 +463,15 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                             "current students", "university partners", "leadership",
                             "academic calendar", "email", "phone", "contact",
                         }
-                        
-                        if (len(title) < 5 or 
-                            any(junk in title_lower for junk in junk_titles) or
-                            title_lower in junk_titles or
-                            re.match(r'^\d+$', title) or
-                            re.match(r'^\w{2,3}$', title)):
+                        if (
+                            len(title) < 5
+                            or any(junk in title_lower for junk in junk_titles)
+                            or title_lower in junk_titles
+                            or re.match(r"^\d+$", title)
+                            or re.match(r"^\w{2,3}$", title)
+                        ):
                             continue
-                        
+
                         # Extract location
                         location = None
                         location_patterns = [
@@ -515,7 +524,6 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
                             try:
                                 html_snippet = str(element)[:2500]
                                 extracted = _extract_with_llm(html_snippet, abs_link)
-
                                 if extracted and extracted.get("title"):
                                     base_result.update({
                                         "title": extracted.get("title") or base_result["title"],
@@ -532,7 +540,7 @@ def _deep_scrape_page(url: str, timeout_ms: int = DEEP_TIMEOUT_MS) -> List[Dict]
 
                         results.append(base_result)
                         successful_extractions += 1
-                        
+
                         title_preview = base_result["title"][:60] + ("..." if len(base_result["title"]) > 60 else "")
                         print(f"      [{successful_extractions}] {title_preview}")
 
@@ -574,8 +582,9 @@ def scrape_csusb_listings(
                 return True
             return any(b in u for b in ["analytics", "doubleclick", "tracking"])
 
-        ctx.route("**/*", lambda route, req:
-            route.abort() if _should_block(req.url, req.resource_type) else route.continue_()
+        ctx.route(
+            "**/*",
+            lambda route, req: route.abort() if _should_block(req.url, req.resource_type) else route.continue_(),
         )
 
         page = ctx.new_page()
@@ -595,17 +604,17 @@ def scrape_csusb_listings(
 
     if deep and csusb_links:
         company_urls = list({item["link"] for item in csusb_links})
-        
+
         if len(company_urls) > max_pages:
             print(f"Limiting deep scrape to {max_pages} of {len(company_urls)} companies")
             company_urls = company_urls[:max_pages]
-        
+
         print(f"Deep scraping {len(company_urls)} company career pages...")
-        print(f"This will take approximately {len(company_urls) * 2} seconds...")
+        print(f"This may take ~{len(company_urls) * 2} seconds...")
 
         deep_success_count = 0
         total_internships_found = 0
-        
+
         for idx, company_url in enumerate(company_urls, 1):
             print(f"  [{idx}/{len(company_urls)}] Scraping: {company_url}")
             deep_results = _deep_scrape_page(company_url)
@@ -668,11 +677,12 @@ def quick_company_links_playwright(
         ctx = browser.new_context(user_agent=UA, viewport={"width": 1280, "height": 720})
         page = ctx.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        soup = BeautifulSoup(page.content(), "lxml")
+        soup = BeautifulSoup(page.content() or "", "lxml")
         browser.close()
 
     main = soup.find("main") or soup
-    rows, seen = [], set()
+    rows: List[Dict] = []
+    seen: set[tuple[str, str]] = set()
     company_urls: List[str] = []
 
     for a in main.find_all("a", href=True):
@@ -710,8 +720,8 @@ def quick_company_links_playwright(
 
     if not company_urls:
         print(f"  No links found on CSUSB page, trying direct company URLs...")
-        
-        company_clean = re.sub(r'[^a-z0-9]', '', token.lower())
+
+        company_clean = re.sub(r"[^a-z0-9]", "", token.lower())
         potential_urls = [
             f"https://careers.{company_clean}.com",
             f"https://www.{company_clean}.com/careers",
@@ -722,12 +732,12 @@ def quick_company_links_playwright(
             f"https://{token.replace(' ', '')}.wd1.myworkdayjobs.com",
             f"https://{company_clean}.wd5.myworkdayjobs.com",
         ]
-        
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
             ctx = browser.new_context(user_agent=UA, viewport={"width": 1280, "height": 720})
             page = ctx.new_page()
-            
+
             for test_url in potential_urls[:5]:
                 try:
                     print(f"  Trying: {test_url}")
@@ -738,7 +748,7 @@ def quick_company_links_playwright(
                         break
                 except Exception:
                     continue
-            
+
             browser.close()
 
     if not company_urls:
@@ -752,7 +762,7 @@ def quick_company_links_playwright(
         for idx, company_url in enumerate(company_urls[:5], 1):
             print(f"  [{idx}/{len(company_urls[:5])}] Scraping: {company_url}")
             deep_results = _deep_scrape_page(company_url)
-            
+
             for result in deep_results:
                 if isinstance(result, dict):
                     result["company"] = result.get("company") or company_token
@@ -773,7 +783,7 @@ def quick_company_links_playwright(
             df[c] = None
 
     df = df.drop_duplicates(subset=["link"], keep="first")
-    
+
     print(f"  ✓ Total internships found: {len(df)}")
     return df[cols]
 

@@ -7,18 +7,15 @@ from typing import Any, Dict, List, Optional
 from pypdf import PdfReader
 from docx import Document
 
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
+# OpenAI client helpers
+from llm_provider import get_openai_client, get_model
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
-
 # ---------- File -> text ----------
 def _read_pdf(b: bytes) -> str:
-    out = []
+    out: List[str] = []
     reader = PdfReader(BytesIO(b))
     for page in reader.pages:
         try:
@@ -33,6 +30,10 @@ def _read_docx(b: bytes) -> str:
     return "\n".join([p.text for p in doc.paragraphs])
 
 def extract_resume_text(uploaded_file) -> str:
+    """
+    Accepts a Streamlit UploadedFile-like object and returns best-effort UTF-8 text.
+    Supports PDF, DOCX, and plain text.
+    """
     name = (uploaded_file.name or "").lower()
     b = uploaded_file.getvalue()
     if name.endswith(".pdf"):
@@ -44,11 +45,29 @@ def extract_resume_text(uploaded_file) -> str:
     except Exception:
         return b.decode("latin-1", errors="ignore")
 
+# ---------- OpenAI helper ----------
+def _openai_chat(system: str, user: str, max_tokens: int = 600, temperature: float = 0.1) -> str:
+    """
+    Calls OpenAI Chat Completions and returns assistant content (string).
+    """
+    client = get_openai_client()
+    model = get_model()
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=float(temperature),
+        max_tokens=int(max_tokens),
+    )
+    return (resp.choices[0].message.content or "").strip()
+
 # ---------- LLM extraction ----------
 def llm_resume_extract(resume_text: str) -> Dict[str, Any]:
     """
-    Uses a single {resume_text} variable and escapes all braces in the prompt
-    so ChatPromptTemplate never sees stray placeholders.
+    Uses a single {resume_text} variable and returns structured JSON only.
+    (OpenAI-based; no LangChain/Ollama.)
     """
     if not (resume_text or "").strip():
         return {}
@@ -56,46 +75,32 @@ def llm_resume_extract(resume_text: str) -> Dict[str, Any]:
     system = (
         "You extract structured résumé data and output compact JSON only. "
         "Follow this strict schema (omit null/empty fields). "
-        # Escape literal braces for ChatPromptTemplate:
-        "{{{{"
+        "{"
         '  "name": "string",'
         '  "email": "string",'
         '  "phone": "string",'
-        '  "links": {{"linkedin": "url", "github": "url", "portfolio": "url", "other": ["url", ...] }},'
+        '  "links": {"linkedin": "url", "github": "url", "portfolio": "url", "other": ["url", ...]},'
         '  "summary": "1-2 sentences",'
         '  "skills": ["token", ...],'
-        '  "education": [{{"school":"", "degree":"", "field":"", "start":"", "end":"", "gpa":""}}],'
-        '  "experience": [{{"company":"", "title":"", "start":"", "end":"", "location":"", "bullets":["..."]}}],'
-        '  "projects": [{{"name":"", "tech":["..."], "summary":""}}],'
+        '  "education": [{"school":"", "degree":"", "field":"", "start":"","end":"","gpa":""}],'
+        '  "experience": [{"company":"","title":"","start":"","end":"","location":"","bullets":["..."]}],'
+        '  "projects": [{"name":"","tech":["..."],"summary":""}],'
         '  "certifications": ["..."]'
-        "}}}}"
-        "Return strictly minified JSON. Do not include any commentary."
+        "}"
+        " Return strictly minified JSON. Do not include any commentary."
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system),
-        ("human", "RESUME TEXT:\n{resume_text}\n\nReturn JSON now.")
-    ])
-
-    llm = ChatOllama(
-        base_url=OLLAMA_HOST,
-        model=MODEL_NAME,
-        temperature=0.1,
-        streaming=False,
-        model_kwargs={"num_ctx": 4096, "num_predict": 350}
-    )
-
-    # Truncate to keep it snappy for local models
-    text = resume_text.strip()
+    # Truncate to keep prompt size reasonable
+    text = (resume_text or "").strip()
     if len(text) > 12000:
         text = text[:12000]
 
-    response = (prompt | llm).invoke({"resume_text": text})
-    out = response.content or "{}"
+    user = f"RESUME TEXT:\n{text}\n\nReturn JSON now."
+    out = _openai_chat(system, user, max_tokens=600, temperature=0.1)
 
     # Extract the first JSON object from the reply
-    m = re.search(r"\{[\s\S]*\}", out)
-    json_str = m.group(0) if m else out
+    m = re.search(r"\{[\s\S]*\}", out or "")
+    json_str = m.group(0) if m else (out or "{}")
 
     data: Dict[str, Any] = {}
     try:
@@ -163,7 +168,8 @@ def answer_from_resume(question: str, data: Dict[str, Any]) -> str:
         return "**Skills**\n\n" + (bullets(skills) if skills else "_None captured_")
     if "education" in q or "school" in q or "degree" in q:
         edu = data.get("education") or []
-        if not edu: return "_No education entries captured_"
+        if not edu: 
+            return "_No education entries captured_"
         lines = []
         for e in edu:
             parts = [e.get("degree"), e.get("field"), e.get("school")]
@@ -174,17 +180,20 @@ def answer_from_resume(question: str, data: Dict[str, Any]) -> str:
         return "**Education**\n\n" + bullets(lines)
     if "project" in q:
         projs = data.get("projects") or []
-        if not projs: return "_No projects captured_"
+        if not projs: 
+            return "_No projects captured_"
         lines = []
         for p in projs[:5]:
             tech = ", ".join(p.get("tech") or [])
             s = f"{p.get('name','Project')} — {p.get('summary','')}"
-            if tech: s += f"  \n   _Tech_: {tech}"
+            if tech: 
+                s += f"  \n   _Tech_: {tech}"
             lines.append(s)
         return "**Projects**\n\n" + "\n\n".join([f"- {x}" for x in lines])
     if "experience" in q or "work" in q or "employment" in q:
         ex = data.get("experience") or []
-        if not ex: return "_No experience captured_"
+        if not ex: 
+            return "_No experience captured_"
         lines = []
         for e in ex[:5]:
             when = " - ".join([e.get("start") or "", e.get("end") or ""]).strip(" -")

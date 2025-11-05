@@ -1,15 +1,18 @@
+# query_to_filter.py
 import os, re, json
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
 # ============================================================
-# CONFIGURATION
+# OPENAI PROVIDER (via local helper)
 # ============================================================
-# Toggle whether to use Ollama for natural-language parsing.
-USE_OLLAMA = True
-# The Ollama API endpoint (by default local service).
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-# Default model name to use for parsing/filter extraction.
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+try:
+    from llm_provider import get_provider, get_model, get_openai_client
+    _OPENAI_AVAILABLE = (get_provider() == "openai")
+except Exception:
+    # If llm_provider isn't available for some reason, fall back to rules only
+    _OPENAI_AVAILABLE = False
+    get_openai_client = None
+    get_model = lambda: "gpt-4o-mini"  # type: ignore
 
 # ============================================================
 # BASIC KEYWORD SETS
@@ -49,38 +52,34 @@ GREETINGS = {
 }
 
 # ============================================================
-# LLM HELPER FUNCTION
+# LLM HELPER FUNCTION (OpenAI)
 # ============================================================
 
 def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str, Any]:
     """
-    Calls a local Ollama model via LangChain to extract structured JSON.
+    Calls OpenAI chat completions to extract structured JSON.
     Returns {} on any failure so the rest of the app can continue.
-
-    Parameters:
-        sys_msg:  The system prompt that defines what to extract.
-        user:     The user query text.
-        num_ctx:  Context window.
-        num_predict: Max tokens to predict.
-        temp:     Sampling temperature (low = deterministic).
     """
+    if not _OPENAI_AVAILABLE:
+        return {}
+
     try:
-        from langchain_ollama import ChatOllama
-        from langchain.prompts import ChatPromptTemplate
+        client = get_openai_client()
+        model = get_model()
+    except Exception:
+        return {}
 
-        # Compose a prompt template with both system and user messages
-        tmpl = ChatPromptTemplate.from_messages([("system", sys_msg), ("human", "{q}")])
-
-        # Initialize the Ollama LLM
-        llm = ChatOllama(
-            base_url=OLLAMA_HOST, model=MODEL_NAME,
-            temperature=temp, streaming=False,
-            model_kwargs={"num_ctx": num_ctx, "num_predict": num_predict},
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user},
+            ],
+            temperature=float(temp),
+            max_tokens=int(num_predict),
         )
-
-        # Invoke the chain with the user text
-        out = (tmpl | llm).invoke({"q": user}).content
-
+        out = (resp.choices[0].message.content or "").strip()
         # Extract JSON from the response (regex for { ... } structure)
         m = re.search(r"\{[\s\S]*\}", out)
         return json.loads(m.group(0) if m else out)
@@ -144,12 +143,11 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
         "- Lower-case tokens; keep arrays ≤ 6; avoid nulls; do not invent values."
     )
 
-    # ---- Step 1: Try LLM extraction ----
-    llm_data: Dict[str, Any] = {}
-    if USE_OLLAMA:
-        llm_data = _llm_json(sys, s)
-        if not isinstance(llm_data, dict):
-            llm_data = {}
+    # ---- Step 1: Try LLM extraction (OpenAI) ----
+    llm_data: Dict[str, Any] = _llm_json(sys, s)
+
+    if not isinstance(llm_data, dict):
+        llm_data = {}
 
     # ---- Step 2: Add fallback data if LLM gave nothing ----
     # Check for "strict"/"only"/"exact" modifiers
@@ -162,7 +160,7 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
     # Simple token extraction for fallback
     skills, keywords = _extract_skills_and_keywords(s)
 
-    # Merge fallback info into LLM result
+    # Merge fallback info into LLM result (only set if missing)
     llm_data.setdefault("role_match", role_match)
     llm_data.setdefault("show_all", show_all)
     llm_data.setdefault("title_keywords", keywords)
@@ -210,7 +208,7 @@ def classify_intent(q: str) -> str:
         return "general_question"
 
     # --- Step 3: Ask LLM for deterministic intent (if available) ---
-    if USE_OLLAMA:
+    if _OPENAI_AVAILABLE:
         d = _llm_json(
             'Return JSON exactly like {"intent":"internship_search"} or {"intent":"general_question"}. '
             'If the user typed only a company name, treat it as internship_search.',
