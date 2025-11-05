@@ -21,6 +21,10 @@ from resume_parser import (
     answer_from_resume,
 )
 
+from scraper import scrape_csusb_listings
+
+
+
 APP_TITLE = "CSUSB Internship Finder Agent"
 DATA_DIR = Path("data")
 PARQUET_PATH = DATA_DIR / "internships.parquet"
@@ -55,6 +59,11 @@ def backend_ok() -> bool:
 
 if not backend_ok():
     st.warning(f"Backend not reachable at {BACKEND_URL}. Some features may be limited.")
+
+    # Example: visit up to 60 company links concurrently
+df = scrape_csusb_listings(max_pages=60, concurrency=12)
+st.dataframe(df, hide_index=True, use_container_width=True)
+
 
 # --- CSS injector ---
 def inject_css(path: str = "styles.css"):

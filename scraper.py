@@ -10,6 +10,14 @@ import re
 import time
 import json
 import pandas as pd
+
+import asyncio
+
+
+from async_scraper import (
+    scrape_csusb_internships,
+    CSUSB_CSE_URL,
+)
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
@@ -128,6 +136,46 @@ def _extract_with_llm(html_snippet: str, url: str) -> Optional[Dict]:
     except Exception:
         pass
     return None
+
+
+
+
+def scrape_csusb_listings(
+    deep: bool = False,          # kept for compatibility; ignored in this async path
+    max_pages: int = 60,         # how many company links to visit
+    url: str = CSUSB_CSE_URL,
+    concurrency: int = 12,
+) -> pd.DataFrame:
+    """
+    Starts from the CSUSB page, collects external company/career links,
+    visits them concurrently, parses internship titles + URLs,
+    returns a DataFrame of actual internship listings.
+    """
+    jobs = asyncio.run(scrape_csusb_internships(url, max_companies=max_pages, concurrency=concurrency))
+    rows: List[Dict] = [j.to_dict() for j in jobs]
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "title", "company", "location", "posted_date",
+                "link", "host", "source", "details"
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    # normalize for the app: use "link" instead of "url"
+    if "url" in df.columns:
+        df = df.rename(columns={"url": "link", "source_page": "source"})
+
+    wanted = ["title", "company", "location", "posted_date", "link", "host", "source", "details"]
+    for c in wanted:
+        if c not in df.columns:
+            df[c] = None
+
+    # dedupe by link
+    df = df.drop_duplicates(subset=["link"], keep="first")
+    return df[wanted]
+
 
 
 # ---------- helpers ----------
