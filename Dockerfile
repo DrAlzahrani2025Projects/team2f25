@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends dos2unix && \
     rm -rf /var/lib/apt/lists/*
 
 # Environment variables
-ENV MODEL_NAME=qwen2.5:0.5b \
+ENV MODEL_NAME=qwen2.5:1.5b \
     OLLAMA_HOST=http://127.0.0.1:11434 \
     STREAMLIT_SERVER_PORT=5002 \
     STREAMLIT_SERVER_BASE_URL_PATH=team2f25 \

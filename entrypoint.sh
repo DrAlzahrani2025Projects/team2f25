@@ -4,7 +4,7 @@ set -euo pipefail
 # Set defaults for all environment variables
 export STREAMLIT_SERVER_PORT="${STREAMLIT_SERVER_PORT:-5002}"
 export STREAMLIT_SERVER_BASE_URL_PATH="${STREAMLIT_SERVER_BASE_URL_PATH:-team2f25}"
-export MODEL_NAME="${MODEL_NAME:-qwen2.5:0.5b}"
+export MODEL_NAME="${MODEL_NAME:-qwen2.5:1.5b}"
 export OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 export BACKEND_PORT="${BACKEND_PORT:-8000}"
 

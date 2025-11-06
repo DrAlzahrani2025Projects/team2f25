@@ -14,7 +14,7 @@ DATA_DIR = Path("data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
 
 # ---------- file -> text ----------
 def _read_pdf(b: bytes) -> str:
