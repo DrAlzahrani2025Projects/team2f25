@@ -58,7 +58,7 @@ def _extract_with_llm(html_snippet: str, url: str) -> Optional[Dict]:
 
         llm = ChatOllama(
             base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
-            model=os.getenv("MODEL_NAME", "qwen2.5:0.5b"),
+            model=os.getenv("MODEL_NAME", "qwen2.5:1.5b"),
             temperature=0.05,
             streaming=False,
             model_kwargs={"num_ctx": 3072, "num_predict": 350},

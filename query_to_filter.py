@@ -9,7 +9,7 @@ USE_OLLAMA = True
 # The Ollama API endpoint (by default local service).
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 # Default model name to use for parsing/filter extraction.
-MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
 
 # ============================================================
 # BASIC KEYWORD SETS
