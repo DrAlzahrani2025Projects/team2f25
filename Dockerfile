@@ -43,7 +43,7 @@ RUN playwright install chromium && \
     
 
 # Copy application files  ⬅️  include resume_manager.py and your real styles.css
-COPY app.py ui.py llm.py backend.py scraper.py query_to_filter.py resume_manager.py resume_parser.py entrypoint.sh ./
+COPY app.py main.py ui.py llm.py backend.py scraper.py query_to_filter.py backend_navigator.py playwright_fetcher.py resume_manager.py resume_parser.py entrypoint.sh ./
 COPY styles.css ./
 RUN apt-get update && apt-get install -y --no-install-recommends dos2unix && \
     dos2unix /app/*.sh && \
