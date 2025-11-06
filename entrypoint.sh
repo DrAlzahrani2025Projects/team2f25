@@ -62,59 +62,6 @@ else
 fi
 
 # ============================================================================
-# 2. START BACKEND
-# ============================================================================
-echo ""
-echo "[2/4] Starting backend navigator..."
-python -m uvicorn backend_navigator:app \
-  --host 0.0.0.0 \
-  --port "$BACKEND_PORT" \
-  --log-level info \
-  >/tmp/backend.log 2>&1 &
-
-BACKEND_PID=$!
-echo "Backend started with PID: $BACKEND_PID"
-
-# Wait for backend to be ready
-echo "Waiting for backend to be ready..."
-MAX_RETRIES=30
-RETRY=0
-while [ $RETRY -lt $MAX_RETRIES ]; do
-  if curl -s "http://localhost:${BACKEND_PORT}/health" >/dev/null 2>&1; then
-    echo "Backend is ready!"
-    break
-  fi
-  echo "  Retry $((RETRY+1))/$MAX_RETRIES..."
-  sleep 1
-  RETRY=$((RETRY+1))
-done
-
-if [ $RETRY -ge $MAX_RETRIES ]; then
-  echo "ERROR: Backend failed to start"
-  cat /tmp/backend.log
-  kill $BACKEND_PID 2>/dev/null || true
-  exit 1
-fi
-
-# ============================================================================
-# 3. TEST BACKEND CONNECTIVITY
-# ============================================================================
-echo ""
-echo "[3/4] Testing backend connectivity..."
-RESPONSE=$(curl -s -X POST "http://localhost:${BACKEND_PORT}/fetch" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.google.com"}' 2>&1 || echo "FAILED")
-
-if echo "$RESPONSE" | grep -q "FAILED\|error\|refused"; then
-  echo "ERROR: Backend is not responding correctly"
-  echo "Response: $RESPONSE"
-  kill $BACKEND_PID 2>/dev/null || true
-  exit 1
-else
-  echo "Backend connectivity OK"
-fi
-
-# ============================================================================
 # 4. START STREAMLIT
 # ============================================================================
 echo ""
