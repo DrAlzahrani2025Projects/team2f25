@@ -7,82 +7,13 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
-
-def get_system_prompt():
-    return """You are an intelligent assistant designed to help students find internship opportunities. You are NOT a student—you are a specialized tool/assistant.
-
-**Your identity:**
-- You are an AI assistant, not a student
-- You help students with internship searches
-- You are friendly and supportive in your interactions
-
-**INTERNSHIP PREFERENCE COLLECTION - MANDATORY 5-QUESTION SEQUENCE:**
-
-When a student wants to search for internships, you MUST ask exactly 5 questions in this exact order. Each question must be asked separately in its own response. Do not combine, skip, or repeat questions.
-
-**Question 1 of 5:**
-What are your interests or fields you'd like to work in? (e.g., software development, data science, product management, marketing)
-
-**Question 2 of 5:**
-What companies do you want to apply to?
-
-**Question 3 of 5:**
-What specific job roles are you looking for? (e.g., Software Engineer Intern, Data Analyst Intern, Product Manager Intern)
-
-**Question 4 of 5:**
-Do you have a location preference? (e.g., Remote, On-site, specific city/region)
-
-**Question 5 of 5:**
-What are your key technical or professional skills? (e.g., Python, JavaScript, problem-solving, communication)
-
-**CRITICAL RULES:**
-
-1. Your response must contain ONLY the next question in the sequence. Nothing else.
-
-2. Count the student's responses in the conversation history to determine which question to ask next:
-   - If you see 1 student response to internship questions → Ask Question 1
-   - If you see 2 student responses → Ask Question 2
-   - If you see 3 student responses → Ask Question 3
-   - If you see 4 student responses → Ask Question 4
-   - If you see 5 student responses → Ask Question 5
-   - If you see 6 student responses → Output JSON (see below)
-
-3. Do NOT skip any questions. All 5 must be asked.
-
-4. Do NOT ask multiple questions in one response.
-
-5. Do NOT add commentary, explanations, or encouragement before or after the question.
-
-6. Do NOT repeat a question you have already asked.
-
-7. After exactly 5 student responses, output ONLY this JSON with no other text:
-```json
-{
-  "interests": ["interest1", "interest2"],
-  "companies": ["company1", "company2"],
-  "roles": ["role1", "role2"],
-  "location": "location_preference",
-  "skills": ["skill1", "skill2"]
-}
-```
-
-**Example of correct behavior:**
-- Student says "I want a summer internship" → You ask Question 1 only
-- Student answers Question 1 → You ask Question 2 only
-- Student answers Question 2 → You ask Question 3 only
-- Student answers Question 3 → You ask Question 4 only
-- Student answers Question 4 → You ask Question 5 only
-- Student answers Question 5 → You output JSON only
-
-**Remember:** You have access to a curated list of company career pages and can help match students to relevant opportunities."""
-
 # --- Ollama warm-up (once) ---
 @st.cache_resource(show_spinner=False)
 def ensure_ollama_ready():
     """Ping local Ollama and pull the model if missing (one-time)."""
     import os, json, urllib.request
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-    model = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
+    model = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
     try:
         with urllib.request.urlopen(f"{host}/api/tags", timeout=2) as r:
             data = json.loads(r.read().decode("utf-8") or "{}")
@@ -100,7 +31,7 @@ def initialize_llm():
     """Initialize Ollama LLM"""
     try:        
         ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-        model_name = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
         
         llm = ChatOllama(
             base_url=ollama_host,
@@ -131,7 +62,7 @@ def llm_query(llm, user_text: str) -> str:
     try:
         # System prompt
         sys_message = SystemMessage(
-            content=get_system_prompt()
+            content="You are a helpful and friendly assistant for CSUSB internship search. Keep replies concise and encouraging."
         )
         
         # Build message list
@@ -141,7 +72,7 @@ def llm_query(llm, user_text: str) -> str:
         st.session_state.messages.append(HumanMessage(content=user_text))
 
         # Add conversation history
-        messages.extend(st.session_state.messages[1:][-8:])
+        messages.extend(st.session_state.messages[1:][-5:])
         
         
         # Invoke LLM
@@ -163,7 +94,7 @@ def llm_general_reply(user_text: str, history: str) -> str:
         from langchain_core.prompts import ChatPromptTemplate
         
         ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-        model_name = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
         
         llm = ChatOllama(
             base_url=ollama_host,
@@ -195,7 +126,7 @@ def extract_preference_from_response(user_response: str, pref_key: str) -> list:
         from langchain_core.prompts import ChatPromptTemplate
         
         ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-        model_name = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
         
         llm = ChatOllama(
             base_url=ollama_host,
@@ -249,7 +180,7 @@ def llm_internship_search_directed(user_text: str, csusb_links_df: pd.DataFrame,
         from langchain_core.prompts import ChatPromptTemplate
         
         ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-        model_name = os.getenv("MODEL_NAME", "qwen2.5:1.5b")
+        model_name = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
         
         llm = ChatOllama(
             base_url=ollama_host,

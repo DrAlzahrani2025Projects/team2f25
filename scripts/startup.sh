@@ -6,7 +6,7 @@ IMAGE="${IMAGE:-team2f25-streamlit}"
 NAME="${NAME:-team2f25}"                 # app container name
 PORT="${PORT:-5002}"                     # app/Streamlit port exposed to host
 BASE_PATH="${BASE_PATH:-team2f25}"       # streamlit base path
-MODEL_NAME="${MODEL_NAME:-qwen2.5:1.5b}" # ollama model to pull
+MODEL_NAME="${MODEL_NAME:-qwen2.5:0.5b}" # ollama model to pull
 
 # Ollama sidecar settings
 OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:latest}"

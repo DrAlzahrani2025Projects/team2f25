@@ -307,7 +307,7 @@ async def chat_complete(request: Request, body: dict = Body(...)):
     Returns:
         {
             "response": "Complete response text",
-            "model": "qwen2.5:1.5b",
+            "model": "qwen2.5:0.5b",
             "tokens": 42
         }
     """
