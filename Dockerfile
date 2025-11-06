@@ -43,7 +43,7 @@ RUN playwright install chromium && \
     
 
 # Copy application files  ⬅️  include resume_manager.py and your real styles.css
-COPY app.py main.py ui.py llm.py backend.py scraper.py query_to_filter.py backend_navigator.py playwright_fetcher.py resume_manager.py resume_parser.py entrypoint.sh ./
+COPY app.py main.py scraper.py query_to_filter.py backend_navigator.py playwright_fetcher.py resume_manager.py resume_parser.py entrypoint.sh ./
 COPY styles.css ./
 RUN apt-get update && apt-get install -y --no-install-recommends dos2unix && \
     dos2unix /app/*.sh && \
@@ -55,7 +55,6 @@ ENV MODEL_NAME=qwen2.5:0.5b \
     OLLAMA_HOST=http://127.0.0.1:11434 \
     STREAMLIT_SERVER_PORT=5002 \
     STREAMLIT_SERVER_BASE_URL_PATH=team2f25 \
-    CSUSB_CSE_URL=https://www.csusb.edu/cse/internships-careers \
     BACKEND_PORT=8000
 
 EXPOSE 5002 11434
