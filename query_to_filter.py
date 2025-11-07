@@ -111,23 +111,33 @@ def _extract_skills_and_keywords(s: str) -> tuple[list[str], list[str]]:
 # ============================================================
 # MAIN: QUERY PARSER
 # ============================================================
-
 def parse_query_to_filter(q: str) -> Dict[str, Any]:
     """
-    Main function: turns a free-text user query into a structured filter dictionary
-    using either LLM extraction or rule-based fallback.
+    Turn a free-text user query into a structured filter dictionary.
+    Returns a compact dict, e.g.:
+    {
+      "intent": "internship_search" | "general_question" | "resume_question",
+      "company_name": "string",
+      "title_keywords": ["token", ...],
+      "skills": ["token", ...],
+      "show_all": true|false,
+      "role_match": "broad" | "strict",
+      # location fields are included ONLY if explicitly typed:
+      # "city": "...", "state": "...", "country": "...", "zipcode": "...",
+      "remote_type": "remote|hybrid|onsite"
+    }
     """
     if not q:
         return {}
 
     s = q.strip()
 
-    # Define system prompt to instruct the LLM what JSON to produce
+    # ---- LLM instruction ----
     sys = (
         "You extract job-search filters from a short user query.\n"
         "Return ONLY compact JSON with these keys (omit keys that don't apply):\n"
         "{\n"
-        '  "intent": "internship_search|general_question",\n'
+        '  "intent": "internship_search|general_question|resume_question",\n'
         '  "company_name": "string",\n'
         '  "title_keywords": ["token", ...],\n'
         '  "skills": ["token", ...],\n'
@@ -144,47 +154,60 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
         "- Lower-case tokens; keep arrays ≤ 6; avoid nulls; do not invent values."
     )
 
-    # ---- Step 1: Try LLM extraction ----
-    llm_data: Dict[str, Any] = {}
+    # ---- Step 1: LLM extraction (optional) ----
+    data: Dict[str, Any] = {}
     if USE_OLLAMA:
-        llm_data = _llm_json(sys, s)
-        if not isinstance(llm_data, dict):
-            llm_data = {}
+        data = _llm_json(sys, s, num_ctx=2048, num_predict=160, temp=0.2)
+        if not isinstance(data, dict):
+            data = {}
 
-    # ---- Step 2: Add fallback data if LLM gave nothing ----
-    # Check for "strict"/"only"/"exact" modifiers
+    # ---- Step 2: Local fallbacks / defaults ----
     role_match = "strict" if re.search(r"\b(strict|exact|only|just)\b", s, re.I) else "broad"
-    # Detect "show all" pattern
     show_all = bool(
-        re.search(r"\b(?:show|list|give|fetch|display)\s+(?:all|every)\s+internship[s]?\b", s, re.I) or
-        re.search(r"\bcsusb\s+(?:listed|list)\s+internship[s]?\b", s, re.I)
+        re.search(r"\b(show|list|give|display|fetch|see)\b.*\b(all|every)\b.*\binternship[s]?\b", s, re.I) or
+        re.search(r"\b(all|every)\b.*\binternship[s]?\b", s, re.I) or
+        re.search(r"\binternship[s]?\b.*\b(all|every|listed)\b", s, re.I) or
+        re.search(r"\ball\b.*\blisted\b.*\binternship[s]?\b", s, re.I)
     )
-    # Simple token extraction for fallback
     skills, keywords = _extract_skills_and_keywords(s)
 
-    # Merge fallback info into LLM result
-    llm_data.setdefault("role_match", role_match)
-    llm_data.setdefault("show_all", show_all)
-    llm_data.setdefault("title_keywords", keywords)
-    llm_data.setdefault("skills", skills)
+    # Merge fallback into LLM result
+    data.setdefault("role_match", role_match)
+    data.setdefault("show_all", show_all)
+    data.setdefault("title_keywords", keywords)
+    data.setdefault("skills", skills)
 
-    # Normalize arrays and ensure intent
-    llm_data["title_keywords"] = [t.strip().lower() for t in llm_data.get("title_keywords", [])][:6]
-    llm_data["skills"] = [t.strip().lower() for t in llm_data.get("skills", [])][:6]
-    if not llm_data.get("intent"):
-        # Default: if contains "intern", assume internship search
-        llm_data["intent"] = "internship_search" if re.search(r"\bintern", s, re.I) else "general_question"
+    # Normalize arrays
+    data["title_keywords"] = [t.strip().lower() for t in data.get("title_keywords", [])][:6]
+    data["skills"] = [t.strip().lower() for t in data.get("skills", [])][:6]
 
-    # If the query doesn’t contain a location cue, drop any location fields.
+    # Intent fallback (resume > internship > general)
+    if not data.get("intent"):
+        s_lo = s.lower()
+        if re.search(r"\b(resume|résumé|cv|gpa|projects?|experience|education)\b", s_lo):
+            data["intent"] = "resume_question"
+        elif re.search(r"\bintern(ship|ships)?\b", s_lo) or re.search(
+            r"\b(find|show|list|apply|search|available|display|get)\b.*\b(intern|job|role|position|career|opening)\b", s_lo
+        ):
+            data["intent"] = "internship_search"
+        else:
+            data["intent"] = "general_question"
+    else:
+        # clamp to allowed set
+        if data["intent"] not in {"internship_search", "general_question", "resume_question"}:
+            data["intent"] = "general_question"
+
+    # Drop location fields unless explicitly present
     explicit_loc = re.search(
-        r"\b(remote|onsite|hybrid|usa|united states|uk|england|canada|india|london|new york|ny|ca|tx|\d{5})\b",
+        r"\b(remote|onsite|on-site|hybrid|usa|united states|uk|england|canada|india|"
+        r"london|new york|ny|ca|tx|\d{5})\b",
         s, re.I
     )
     if not explicit_loc:
         for k in ("city", "state", "country", "zipcode"):
-            llm_data.pop(k, None)
+            data.pop(k, None)
 
-    return llm_data
+    return data
 
 # ============================================================
 # INTENT CLASSIFIER
@@ -192,41 +215,33 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
 
 def classify_intent(q: str) -> str:
     """
-    Determines whether the user's input is a general chat
-    or an internship-search intent.
+    Determine 'internship_search' vs 'resume_question' vs 'general_question'
+    with LLM as the source of truth. Falls back only if LLM is unavailable.
     """
-    s = (q or "").lower().strip()
-
-    # --- Step 1: Guard résumé-related questions ---
-    # These should always route to general chat (not internship search).
-    if (
-        re.search(r"\b(resume|résumé|cv)\b", s)
-        or re.search(r"\b(skills?|experience|projects?|education|linkedin|github|email|phone|portfolio)\b", s)
-    ):
+    s = (q or "").strip()
+    if not s:
         return "general_question"
 
-    # --- Step 2: Small-talk / greetings ---
-    if s in GREETINGS or any(g in s for g in GREETINGS):
-        return "general_question"
-
-    # --- Step 3: Ask LLM for deterministic intent (if available) ---
     if USE_OLLAMA:
         d = _llm_json(
-            'Return JSON exactly like {"intent":"internship_search"} or {"intent":"general_question"}. '
-            'If the user typed only a company name, treat it as internship_search.',
-            s, num_ctx=512, num_predict=30, temp=0.0
+            (
+                "Classify the user's message into exactly one of these labels:\n"
+                "- internship_search: user wants internships, companies, roles, skills, or terms\n"
+                "- resume_question: question about user's résumé content, skills, experiences, education, formatting\n"
+                "- general_question: greetings, app usage, anything not related to internships or résumé content\n"
+                'Return JSON exactly like {"intent":"internship_search"} or {"intent":"resume_question"} or {"intent":"general_question"}'
+            ),
+            s,
+            num_ctx=512, num_predict=30, temp=0.0
         )
-        if isinstance(d, dict) and d.get("intent") in {"internship_search", "general_question"}:
-            return d["intent"]
+        label = isinstance(d, dict) and d.get("intent")
+        if label in {"internship_search", "resume_question", "general_question"}:
+            return label
 
-    # --- Step 4: Fallback rule-based detection ---
-    if re.search(r"\bintern(ship|ships)?\b", s):
+    # Emergency fallback if LLM is off/unreachable
+    sl = s.lower()
+    if any(k in sl for k in ["resume", "résumé", "cv", "gpa", "projects", "experience"]):
+        return "resume_question"
+    if "intern" in sl or "career" in sl or "job" in sl:
         return "internship_search"
-    if re.search(r"\b(find|show|list|apply|search|available|display|get)\b.*\b(intern|job|role|position|career|opening)\b", s):
-        return "internship_search"
-    # A single short token (like "Amazon") is likely an internship intent.
-    if re.fullmatch(r"[a-z0-9\.\- ]{2,30}", s) and not re.search(r"\b(hi|hello|help|thanks)\b", s):
-        return "internship_search"
-
-    # Default fallback
     return "general_question"
