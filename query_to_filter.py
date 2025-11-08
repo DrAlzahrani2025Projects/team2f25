@@ -182,9 +182,12 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
     data["skills"] = [t.strip().lower() for t in data.get("skills", [])][:6]
 
     # Intent fallback (resume > internship > general)
+        # Intent fallback (cover letter > resume > internship > general)
     if not data.get("intent"):
         s_lo = s.lower()
-        if re.search(r"\b(resume|résumé|cv|gpa|projects?|experience|education)\b", s_lo):
+        if re.search(r"\b(cover letter|coverletter|make cover letter|write cover letter|draft cover letter|create cover letter)\b", s_lo):
+            data["intent"] = "cover_letter"
+        elif re.search(r"\b(resume|résumé|cv|gpa|projects?|experience|education)\b", s_lo):
             data["intent"] = "resume_question"
         elif re.search(r"\bintern(ship|ships)?\b", s_lo) or re.search(
             r"\b(find|show|list|apply|search|available|display|get)\b.*\b(intern|job|role|position|career|opening)\b", s_lo
@@ -194,8 +197,9 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
             data["intent"] = "general_question"
     else:
         # clamp to allowed set
-        if data["intent"] not in {"internship_search", "general_question", "resume_question"}:
+        if data["intent"] not in {"internship_search", "general_question", "resume_question", "cover_letter"}:
             data["intent"] = "general_question"
+
 
     # Drop location fields unless explicitly present
     explicit_loc = re.search(
@@ -239,7 +243,10 @@ def classify_intent(q: str) -> str:
             return label
 
     # Emergency fallback if LLM is off/unreachable
+        # Emergency fallback if LLM is off/unreachable
     sl = s.lower()
+    if any(k in sl for k in ["cover letter", "coverletter", "make cover letter", "write cover letter", "draft cover letter", "create cover letter"]):
+        return "cover_letter"
     if any(k in sl for k in ["resume", "résumé", "cv", "gpa", "projects", "experience"]):
         return "resume_question"
     if "intern" in sl or "career" in sl or "job" in sl:

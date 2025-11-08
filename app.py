@@ -30,8 +30,11 @@ from query_to_filter import classify_intent
 from resume_parser import extract_resume_text, llm_resume_extract, save_resume, answer_from_resume
 from cover_letter.cl_state import init_cover_state, set_target_url
 from cover_letter.cl_flow import offer_cover_letter, handle_user_message, start_collection
-from resume_manager import read_file_to_text
+from resume_manager import read_file_to_text, llm_is_resume_question
 from cover_letter.cl_flow import ask_next_question  # used later too
+from cover_letter.cl_flow import handle_user_message as cl_flow_handle_user_message
+
+
 
 # -----------------------------------------------------------------------------
 # // Constants / Paths
@@ -78,39 +81,37 @@ with st.sidebar:
     )
 
     if up is not None:
+     file_changed = up.name != st.session_state.get("last_resume_file", "")
+     if file_changed:
         try:
             with st.spinner("Processing resume..."):
-                # ✅ Correct: call the actual read_file_to_text() inside spinner
                 from resume_manager import read_file_to_text
                 from resume_parser import llm_resume_extract
 
-                # Read resume text
                 text = read_file_to_text(up) or ""
+                # Optionally truncate
+                max_chars = 2000
+                if len(text) > max_chars:
+                    text = text[:max_chars]
 
-                # Parse to JSON using LLM (or regex fallback inside that)
                 parsed = llm_resume_extract(text) or {}
 
-                # Save both to session
                 st.session_state["resume_text"] = text
                 st.session_state["resume_json"] = parsed
-
-                # Optional: prefill CL profile
-                prof = st.session_state.get("cover_profile", {})
-                if parsed.get("name") and not prof.get("full_name"):
-                    prof["full_name"] = parsed["name"]
-                if parsed.get("email") and not prof.get("email"):
-                    prof["email"] = parsed["email"]
-                if parsed.get("phone") and not prof.get("phone"):
-                    prof["phone"] = parsed["phone"]
-                st.session_state["cover_profile"] = prof
-
-            st.success("Resume processed & parsed successfully. I’ll use it for your cover letter.")
-            st.session_state["resume_just_uploaded"] = True
-
+                st.session_state["resume_data"] = parsed
+                st.session_state["cover_profile"] = {**st.session_state.get("cover_profile", {}), **{
+                    "full_name": parsed.get("name"),
+                    "email": parsed.get("email"),
+                    "phone": parsed.get("phone")
+                }}
+                st.success("Resume processed & parsed successfully. I’ll use it for your cover letter.")
+                st.session_state["resume_just_uploaded"] = True
+                st.session_state["last_resume_file"] = up.name
         except Exception as e:
             import traceback as _tb
             st.error(f"Resume processing failed: {e}")
             st.code(_tb.format_exc())
+            st.session_state["last_resume_file"] = ""  # Reset to allow retry
 
 # -----------------------------------------------------------------------------
 # // Session state
@@ -220,6 +221,65 @@ if st.session_state.pop("resume_just_uploaded", False) and st.session_state.get(
     # st.stop()  # end this run cleanly after we rendered the next step
 
 
+# ---- If CL flow asked us to fetch a company's links, do it now ----
+pend = st.session_state.pop("pending_company_query", None)
+if pend:
+    # 1) Build a DF for that company/title using your existing CSUSB pipeline
+    try:
+        # You likely already have a function that returns the full CSUSB DF.
+        # Replace `fetch_csusb_df()` with your real function / code that builds the DF.
+        df_all = fetch_csusb_df()  # <-- use your existing code here
+
+        low = pend.lower()
+        df = df_all.copy()
+
+        # simple company/title contains filter
+        mask = (
+            df.get("company", "").astype(str).str.lower().str.contains(low, na=False) |
+            df.get("title", "").astype(str).str.lower().str.contains(low, na=False)
+        )
+        df = df[mask].reset_index(drop=True)
+        if not df.empty and len(df) == 1:
+         url_col = "link" if "link" in df.columns else ("url" if "url" in df.columns else None)
+        if url_col:
+          set_target_url(str(df.iloc[0][url_col]))
+          from cover_letter.cl_flow import ask_next_question
+        ask_next_question(render=ui.render_msg)
+                                #   return
+
+        # 2) Save for the CL flow & try to auto-pick
+        st.session_state["last_results_df"] = df
+
+        url_to_use = None
+        if not df.empty:
+            url_col = "link" if "link" in df.columns else ("url" if "url" in df.columns else None)
+            if url_col and len(df) == 1:
+                url_to_use = str(df.iloc[0][url_col])
+
+        if url_to_use:
+            from cover_letter.cl_state import set_target_url
+            set_target_url(url_to_use)
+
+        # 3) Show a quick preview (optional)
+        if df.empty:
+            ui.render_msg("assistant", f"I couldn’t find any CSUSB CSE links for **{pend}**. "
+                                       f"You can paste a direct job link and I’ll continue.")
+        else:
+            ui.render_msg("assistant", f"Here are {len(df)} matching link(s) for **{pend}**.")
+            ui.render_links_in_chat(df, limit=20)
+
+        # 4) Resume the CL flow (ask next question or generate)
+        from cover_letter.cl_flow import ask_next_question
+        ask_next_question(render=ui.render_msg)
+        
+
+    except Exception as e:
+        import traceback as _tb
+        ui.render_msg("assistant", f"Sorry — fetching links for **{pend}** failed: {e}")
+        st.code(_tb.format_exc())
+        from cover_letter.cl_flow import ask_next_question
+        ask_next_question(render=ui.render_msg)
+        # st.stop()
 
 # -----------------------------------------------------------------------------
 # // Chat input
@@ -234,8 +294,20 @@ st.session_state.messages.append({"role": "user", "content": user_msg})
 ui.render_msg("user", user_msg)
 
 # Let the cover-letter flow handle first
-if handle_user_message(user_msg, render=ui.render_msg):
-    st.stop()
+def handle_user_message(message_text, render):
+    # 1. Check if it's a resume QA request FIRST.
+    if llm_is_resume_question(message_text):
+        resume_json = st.session_state.get("resume_json", {})
+        reply = answer_from_resume(message_text, resume_json)
+        render("assistant", reply or "No resume data available.")
+        return True  # message handled!
+
+    # 2. If not, route to cover letter flow
+    # This is your existing code for internships/cover letter
+    # For example:
+    consumed = cl_flow_handle_user_message(message_text, render)
+    return consumed
+
 
 
 # ---- Proactive "cover letter" intent ----
@@ -250,42 +322,10 @@ if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|dra
 
     # start the CL flow directly (no extra "offer" bubble => prevents duplicate replies)
     start_collection(render=ui.render_msg)
-    # st.stop()
+    st.stop()
 
 
 # If the CL flow asked us to fetch a company's roles, do it now and resume the flow
-pending = st.session_state.get("pending_company_query", "").strip()
-if pending:
-    # Use your existing company-only search helper if available; else fallback to simple filter
-    try:
-        df = handle_company_only_query(pending, deep=True)  # <— your function (if defined elsewhere)
-    except NameError:
-        # Fallback: pull CSUSB DF and filter by company/title/host
-        base_df = fetch_csusb_df()
-        def _low(s): return s.astype(str).str.lower().fillna("")
-        df = base_df.copy()
-        for col in ["title", "company", "link"]:
-            if col not in df.columns:
-                df[col] = ""
-        if "host" not in df.columns:
-            df["host"] = df["link"].map(lambda u: urlparse(u).netloc if isinstance(u, str) else "")
-        qq = re.escape(pending.lower())
-        df = df[_low(df["company"]).str.contains(qq) | _low(df["title"]).str.contains(qq) | _low(df["host"]).str.contains(qq)]
-        df = df[["title", "company", "link"]].drop_duplicates(subset=["link"], keep="first")
-
-    st.session_state["pending_company_query"] = ""      # clear request
-
-    if df is not None and not df.empty:
-        st.session_state["last_results_df"] = df
-        # auto-pick first result if configured
-        if st.session_state.get("auto_pick_first_match", True):
-            url_col = "link" if "link" in df.columns else ("url" if "url" in df.columns else None)
-            if url_col:
-                set_target_url(str(df.iloc[0][url_col]))
-
-    # resume the CL flow (ask next question or generate)
-    ask_next_question(render=ui.render_msg)
-    # st.stop()
 
 # -----------------------------------------------------------------------------
 #  LLM-first routing (no heuristic hardcoding)

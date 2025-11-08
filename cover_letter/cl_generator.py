@@ -70,7 +70,7 @@ def _ollama_cover_letter(profile: Dict[str, str], resume_text: str, job_text: st
     # --- Enhancement: include parsed resume JSON if available ---
     user_blob = {
         "profile": profile,
-        "resume_excerpt": (resume_text or "")[:20000],
+        "resume_excerpt": (resume_text or "")[:8000],
         "resume_json": st.session_state.get("resume_json") or {},  # <--- parsed JSON from your pipeline
         "job_excerpt": job_text,
     }
