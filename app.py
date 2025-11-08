@@ -28,26 +28,30 @@ from query_to_filter import parse_query_to_filter
 from query_to_filter import classify_intent
 # Keep your existing resume helpers:
 from resume_parser import extract_resume_text, llm_resume_extract, save_resume, answer_from_resume
+from cover_letter.cl_state import init_cover_state, set_target_url
+from cover_letter.cl_flow import offer_cover_letter, handle_user_message, start_collection
+from resume_manager import read_file_to_text
+from cover_letter.cl_flow import ask_next_question  # used later too
 
 # -----------------------------------------------------------------------------
-# Constants / Paths
+# // Constants / Paths
 # -----------------------------------------------------------------------------
 APP_TITLE = "CSUSB Internship Finder Agent"
 DATA_DIR = Path("data")
 PARQUET_PATH = DATA_DIR / "internships.parquet"
 
 # -----------------------------------------------------------------------------
-# Page setup + CSS
+# // Page setup + CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title=APP_TITLE, page_icon="💼", layout="wide")
 ui.inject_css("styles.css")
 ui.inject_badge_css()
 ui.header(APP_TITLE, CSUSB_CSE_URL)
+init_cover_state()
 
-# -----------------------------------------------------------------------------
-# Session state
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 # Chat history
+# -----------------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
@@ -57,6 +61,60 @@ if "messages" not in st.session_state:
             "What can I do for you?"
         )
     }]
+
+
+# ---- Resume uploader (uses your resume_manager & resume_parser) ----
+# ---- Resume uploader (robust, non-blocking) ----
+# ---- Resume uploader (fixed, reliable) ----
+with st.sidebar:
+    st.subheader("Resume")
+
+    up = st.file_uploader(
+        "Upload PDF/DOCX/TXT",
+        type=["pdf", "docx", "txt"],
+        key="resume_upl_single",
+        accept_multiple_files=False,
+        help="Upload your resume file (PDF/DOCX/TXT)."
+    )
+
+    if up is not None:
+        try:
+            with st.spinner("Processing resume..."):
+                # ✅ Correct: call the actual read_file_to_text() inside spinner
+                from resume_manager import read_file_to_text
+                from resume_parser import llm_resume_extract
+
+                # Read resume text
+                text = read_file_to_text(up) or ""
+
+                # Parse to JSON using LLM (or regex fallback inside that)
+                parsed = llm_resume_extract(text) or {}
+
+                # Save both to session
+                st.session_state["resume_text"] = text
+                st.session_state["resume_json"] = parsed
+
+                # Optional: prefill CL profile
+                prof = st.session_state.get("cover_profile", {})
+                if parsed.get("name") and not prof.get("full_name"):
+                    prof["full_name"] = parsed["name"]
+                if parsed.get("email") and not prof.get("email"):
+                    prof["email"] = parsed["email"]
+                if parsed.get("phone") and not prof.get("phone"):
+                    prof["phone"] = parsed["phone"]
+                st.session_state["cover_profile"] = prof
+
+            st.success("Resume processed & parsed successfully. I’ll use it for your cover letter.")
+            st.session_state["resume_just_uploaded"] = True
+
+        except Exception as e:
+            import traceback as _tb
+            st.error(f"Resume processing failed: {e}")
+            st.code(_tb.format_exc())
+
+# -----------------------------------------------------------------------------
+# // Session state
+# -----------------------------------------------------------------------------
 
 # Rate-limit (10/min)
 if "q_times" not in st.session_state:
@@ -76,7 +134,7 @@ except Exception:
     pass
 
 # -----------------------------------------------------------------------------
-# Rate limit helper (10/min)
+# // Rate limit helper (10/min)
 # -----------------------------------------------------------------------------
 def allow_query() -> bool:
     now = time.time()
@@ -89,7 +147,42 @@ def allow_query() -> bool:
     return True
 
 # -----------------------------------------------------------------------------
-# Cache helpers
+# // Results helper: show table + wire CL
+# -----------------------------------------------------------------------------
+def show_results_and_wire_cover_letter(df):
+    """
+    Displays a results DataFrame and wires 'Cover Letter' actions for each row,
+    plus stores df for 'select row N' chat commands and offers the CL flow.
+    """
+    if df is None or df.empty:
+        with st.chat_message("assistant"):
+            st.write("No results found.")
+        return
+
+    # Store for chat selection ("select row N")
+    st.session_state["last_results_df"] = df
+
+    # Show the table (full width, hide index)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # Per-row "Cover Letter" button for the first 20 rows
+    for i, row in df.head(20).iterrows():
+        url = str(row.get("link") or row.get("url") or "")
+        c1, c2 = st.columns([6, 1])
+        with c1:
+            st.write(f"**{row.get('title','(no title)')}** — {row.get('company','')}")
+            if url:
+                st.write(url)
+        with c2:
+            if st.button("Cover Letter", key=f"cl_btn_{i}"):
+                set_target_url(url)                      # pass URL into CL state
+                offer_cover_letter(render=ui.render_msg) # prompt to begin
+
+    # Proactively offer the flow once results are visible
+    offer_cover_letter(render=ui.render_msg)
+
+# -----------------------------------------------------------------------------
+# // Cache helpers
 # -----------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_cached_df() -> pd.DataFrame:
@@ -114,21 +207,22 @@ def fetch_csusb_df() -> pd.DataFrame:
     return df
 
 # -----------------------------------------------------------------------------
-# Sidebar: résumé uploader (UI) – persists into session_state
-# -----------------------------------------------------------------------------
-ui.show_resume_sidebar(
-    on_extract=lambda file: extract_resume_text(file),
-    on_llm_extract=lambda text: llm_resume_extract(text),
-    on_save=lambda data, text: save_resume(data, text),
-)
-
-# -----------------------------------------------------------------------------
-# Render existing chat history
+# // Render existing chat history
 # -----------------------------------------------------------------------------
 ui.render_history(st.session_state.messages)
 
+
+# If a résumé was just uploaded while CL flow is active, continue now
+if st.session_state.pop("resume_just_uploaded", False) and st.session_state.get("collecting_cover_profile"):
+    from cover_letter.cl_flow import ask_next_question
+    with st.spinner("Reading resume and continuing…"):
+        ask_next_question(render=ui.render_msg)   # LLM asks next question / proceeds
+    # st.stop()  # end this run cleanly after we rendered the next step
+
+
+
 # -----------------------------------------------------------------------------
-# Chat input
+# // Chat input
 # -----------------------------------------------------------------------------
 user_msg = st.chat_input("Type your question…")
 if not user_msg:
@@ -139,8 +233,62 @@ if not allow_query():
 st.session_state.messages.append({"role": "user", "content": user_msg})
 ui.render_msg("user", user_msg)
 
+# Let the cover-letter flow handle first
+if handle_user_message(user_msg, render=ui.render_msg):
+    st.stop()
+
+
+# ---- Proactive "cover letter" intent ----
+t = (user_msg or "").lower().strip()
+if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|draft.*cover\s*letter)\b", t):
+    # if exactly one result is on screen, auto-select its URL
+    df_sel = st.session_state.get("last_results_df")
+    if df_sel is not None and len(df_sel) == 1:
+        url_col = "link" if "link" in df_sel.columns else ("url" if "url" in df_sel.columns else None)
+        if url_col:
+            set_target_url(str(df_sel.iloc[0][url_col]))
+
+    # start the CL flow directly (no extra "offer" bubble => prevents duplicate replies)
+    start_collection(render=ui.render_msg)
+    # st.stop()
+
+
+# If the CL flow asked us to fetch a company's roles, do it now and resume the flow
+pending = st.session_state.get("pending_company_query", "").strip()
+if pending:
+    # Use your existing company-only search helper if available; else fallback to simple filter
+    try:
+        df = handle_company_only_query(pending, deep=True)  # <— your function (if defined elsewhere)
+    except NameError:
+        # Fallback: pull CSUSB DF and filter by company/title/host
+        base_df = fetch_csusb_df()
+        def _low(s): return s.astype(str).str.lower().fillna("")
+        df = base_df.copy()
+        for col in ["title", "company", "link"]:
+            if col not in df.columns:
+                df[col] = ""
+        if "host" not in df.columns:
+            df["host"] = df["link"].map(lambda u: urlparse(u).netloc if isinstance(u, str) else "")
+        qq = re.escape(pending.lower())
+        df = df[_low(df["company"]).str.contains(qq) | _low(df["title"]).str.contains(qq) | _low(df["host"]).str.contains(qq)]
+        df = df[["title", "company", "link"]].drop_duplicates(subset=["link"], keep="first")
+
+    st.session_state["pending_company_query"] = ""      # clear request
+
+    if df is not None and not df.empty:
+        st.session_state["last_results_df"] = df
+        # auto-pick first result if configured
+        if st.session_state.get("auto_pick_first_match", True):
+            url_col = "link" if "link" in df.columns else ("url" if "url" in df.columns else None)
+            if url_col:
+                set_target_url(str(df.iloc[0][url_col]))
+
+    # resume the CL flow (ask next question or generate)
+    ask_next_question(render=ui.render_msg)
+    # st.stop()
+
 # -----------------------------------------------------------------------------
-# LLM-first routing (no heuristic hardcoding)
+#  LLM-first routing (no heuristic hardcoding)
 # -----------------------------------------------------------------------------
 def normalize_intent(label: str) -> str:
     """
@@ -161,7 +309,7 @@ intent = normalize_intent(raw_intent)
 st.sidebar.caption(f"🎯 Intent (LLM): {intent}")
 
 # -----------------------------------------------------------------------------
-# Routes
+# // Routes
 # -----------------------------------------------------------------------------
 if intent == "resume_question":
     # Use existing résumé upload + Q&A
@@ -170,7 +318,7 @@ if intent == "resume_question":
         reply = "Please upload your résumé (PDF/DOCX/TXT) using the sidebar, then ask your question."
         ui.render_msg("assistant", reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
-        st.stop()
+        # st.stop()
     try:
         # Keep your helper signature: answer_from_resume(question, resume_json)
         reply = answer_from_resume(user_msg, data)
@@ -178,7 +326,7 @@ if intent == "resume_question":
         reply = "I ran into an issue analyzing your résumé. Please re-upload it and try again."
     ui.render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
-    st.stop()
+    # st.stop()
 
 elif intent == "internship_search":
     # 1) Load/cached scrape (CSUSB page only; no deep search)
@@ -207,7 +355,6 @@ elif intent == "internship_search":
             df_all[col] = ""
 
     # ensure host column for domain matching
-    from urllib.parse import urlparse
     if "host" not in df_all.columns:
         df_all["host"] = df_all["link"].map(lambda u: urlparse(u).netloc if isinstance(u, str) else "")
 
@@ -266,7 +413,7 @@ elif intent == "internship_search":
             msg += " Say **“show all internships”** to list everything."
         ui.render_msg("assistant", msg)
         st.session_state.messages.append({"role": "assistant", "content": msg})
-        st.stop()
+        # st.stop()
 
     # 5) Keep essentials and dedupe by link
     keep_cols = [c for c in ["title", "company", "link"] if c in results.columns]
@@ -290,7 +437,7 @@ elif intent == "internship_search":
     # links inside the chat + full table below
     ui.render_links_in_chat(results, limit=50)
     ui.render_found_links_table(results)
-    st.stop()
+    # st.stop()
 
 else:
     # General question: concise, deterministic reply (no LLM needed)

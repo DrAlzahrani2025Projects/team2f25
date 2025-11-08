@@ -80,7 +80,7 @@ def inject_badge_css():
 # ------------------------------------------------------------
 # Small helpers (NEW)
 # ------------------------------------------------------------
-def _img_tag(path: str, max_height: int = 260, radius: int = 16, shadow=True) -> str:
+def _img_tag(path: str, max_height: int = 260, radius: int = 16, shadow=False) -> str:
     p = Path(path)
     if not p.exists():
         return ""
@@ -88,8 +88,8 @@ def _img_tag(path: str, max_height: int = 260, radius: int = 16, shadow=True) ->
     shadow_css = "box-shadow: 0 10px 32px rgba(0,0,0,.18);" if shadow else ""
     return (
         f"<img src='data:image/png;base64,{b64}' "
-        f"style='width:100%;max-height:{max_height}px;object-fit:cover;"
-        f"border-radius:{radius}px;{shadow_css}' />"
+        f"style='width:100%;max-height:{max_height}px;object-fit:contain;"
+        f"border-radius:{radius}px;{shadow_css}padding-bottom:2px;' />"
     )
 
 def _avatar_for(role: str):
@@ -124,26 +124,26 @@ def header(app_title: str, source_url: str, image_path: str | None = None,
                     filter: none !important;
                   }}
                 </style>
-                <div class="title-logo"
-                     style="margin: 8px 0 6px; display:flex; justify-content:center; align-items:center;">
+                    <div class="title-logo"
+                     style="margin: 8px 0 8px; display:flex; justify-content:center; align-items:center; line-height:0; overflow:visible;">
                   <img src="data:image/png;base64,{b64}"
                        alt="App header image"
-                       style="height:{max_height}px; max-width:95vw; object-fit:contain; display:block;" />
+                       style="max-height:{max_height}px; height:auto; max-width:95vw; object-fit:contain; display:block; padding-bottom:2px;" />
                 </div>
                 """,
                 unsafe_allow_html=True
             )
             if show_text:
                 st.title(app_title)
-            if show_caption:
-                st.caption(f"🎯 CSUSB CSE internship links • Source: {source_url}")
+            # if show_caption:
+            #     st.caption(f"🎯 CSUSB CSE internship links • Source: {source_url}")
             return  # done
 
     # Fallback: original banner (if available), else plain title
     TITLE_tag = None
     try:
         # radius=0 to avoid rounded corners/shadow in legacy banner too
-        TITLE_tag = _img_tag(TITLE, max_height=180, radius=0)  # may raise if TITLE/_img_tag undefined
+        TITLE_tag = _img_tag(TITLE, max_height=180, radius=0, shadow=False)
     except Exception:
         TITLE_tag = None
 
@@ -184,29 +184,29 @@ def show_resume_sidebar(on_extract, on_llm_extract, on_save):
       - on_llm_extract(text) -> data dict
       - on_save(data, text) -> None
     """
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📎 Resume Upload")
+    # st.sidebar.markdown("---")
+    # st.sidebar.markdown("### 📎 Resume Upload")
 
     if "resume_uploader_key" not in st.session_state:
         st.session_state["resume_uploader_key"] = "resume_uploader_0"
 
-    up = st.sidebar.file_uploader(
-        "Upload your résumé",
-        type=["pdf", "docx", "txt"],
-        key=st.session_state["resume_uploader_key"],
-        help="Upload PDF, DOCX, or TXT file",
-    )
+    # up = st.sidebar.file_uploader(
+    #     "Upload your résumé",
+    #     type=["pdf", "docx", "txt"],
+    #     key=st.session_state["resume_uploader_key"],
+    #     help="Upload PDF, DOCX, or TXT file",
+    # )
 
-    if up is not None:
-        with st.spinner("Extracting résumé..."):
-            text = on_extract(up)
-            data = on_llm_extract(text)
-            on_save(data, text)
-            st.session_state["resume_text"] = text
-            st.session_state["resume_data"] = data
-        st.sidebar.success("✅ Résumé saved!")
-        st.session_state["resume_uploader_key"] = f"resume_uploader_{int(time.time()*1000)}"
-        st.experimental_rerun()
+    # if up is not None:
+    #     with st.spinner("Extracting résumé..."):
+    #         text = on_extract(up)
+    #         data = on_llm_extract(text)
+    #         on_save(data, text)
+    #         st.session_state["resume_text"] = text
+    #         st.session_state["resume_data"] = data
+    #     st.sidebar.success("✅ Résumé saved!")
+    #     st.session_state["resume_uploader_key"] = f"resume_uploader_{int(time.time()*1000)}"
+    #     st.rerun()
 
     if st.session_state.get("resume_data"):
         with st.sidebar.expander("📄 Résumé Info"):
