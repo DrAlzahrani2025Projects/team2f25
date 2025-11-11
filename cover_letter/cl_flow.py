@@ -5,6 +5,8 @@ import os
 import time
 import re
 import streamlit as st
+import langchain_ollama as ChatOllama
+
 
 from .cl_state import (
     init_cover_state, get_profile, set_profile_field,
@@ -27,7 +29,7 @@ def _results_preview(df) -> List[Dict[str, str]]:
         pass
     return out
 
-def _llm() -> Optional["ChatOllama"]:
+def _llm():
     try:
         from langchain_ollama import ChatOllama
     except Exception:
@@ -51,6 +53,9 @@ def _plan_next_step(user_msg: str) -> Dict[str, Any]:
     results_df = st.session_state.get("last_results_df")
     results = _results_preview(results_df)
     collecting = bool(st.session_state.get("collecting_cover_profile"))
+    print("DEBUG: CL PLANNER profile:", profile)
+    print("DEBUG: CL PLANNER target_url:", target_url)
+
 
     # PROACTIVE: auto-match company/title to link if not already set
     patched = False
@@ -197,11 +202,22 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
         return
 
     step = _plan_next_step(user_msg)
-
     act = step.get("action")
+
+    if act == "ask" and step.get("field") == "city":
+        msg = user_msg.strip()
+        if msg and not get_profile().get("city"):
+            set_profile_field("city", msg)
+            print("DEBUG: Emergency fallback: city set to", msg)
+            print("DEBUG: profile after city fallback:", get_profile())
+            # Now re-invoke planner to progress
+            step = _plan_next_step("")
+            act = step.get("action")
     if act == "answer":
         txt = (step.get("text") or "").strip() or "Here’s what I recommend."
         render("assistant", txt)
+        st.session_state.messages.append({"role": "assistant", "content": txt})
+
         step = _plan_next_step("")
 
         act = step.get("action")
@@ -209,6 +225,7 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
     if act == "ask":
         q = (step.get("question") or "").strip() or "Please share that detail."
         render("assistant", q)
+        st.session_state.messages.append({"role": "assistant", "content": q})
         return
 
     if act == "set":
@@ -216,6 +233,7 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
         value = (step.get("value") or "").strip()
         if field and value:
             set_profile_field(field, value)
+            print("DEBUG: set field", field, "=", value)
         _drive_once("", render)
         return
 
@@ -240,6 +258,7 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
         return
 
     render("assistant", "Please paste the job link, or tell me a company/title to target.")
+    st.session_state.messages.append({"role": "assistant", "content": "Please paste the job link, or tell me a company/title to target."})
 
 def _generate_and_show_letter(render: Callable[[str, str], None]) -> None:
     profile: Dict[str, str] = get_profile()
@@ -257,6 +276,8 @@ def _generate_and_show_letter(render: Callable[[str, str], None]) -> None:
     st.session_state.setdefault("generated_cover_letters", []).append(record)
 
     render("assistant", "Here’s your tailored cover letter:\n\n" + letter)
+    st.session_state.messages.append({"role": "assistant", "content": "Here’s your tailored cover letter:\n\n" + letter})
+
     _show_download(record)
     st.session_state["collecting_cover_profile"] = False
 

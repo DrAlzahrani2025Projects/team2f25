@@ -204,6 +204,23 @@ if not allow_query():
 st.session_state.messages.append({"role": "user", "content": user_msg})
 ui.render_msg("user", user_msg)
 
+
+
+# --- PROACTIVE COVER LETTER FLOW OVERRIDE ---
+if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|draft.*cover\s*letter)\b", user_msg.lower()) \
+   or re.search(r"https?://", user_msg.lower()):
+    # If the user pasted a link, save it as job target.
+    if re.search(r"https?://", user_msg.lower()):
+        set_target_url(user_msg)
+    start_collection(render=ui.render_msg)
+    st.stop()
+
+    # --- COVER LETTER PROFILE COLLECTION OVERRIDE ---
+if st.session_state.get("collecting_cover_profile", False):
+    cl_flow_handle_user_message(user_msg, ui.render_msg)
+    st.stop()
+
+
 def handle_user_message(message_text, render):
     if llm_is_resume_question(message_text):
         resume_json = st.session_state.get("resume_json", {})
