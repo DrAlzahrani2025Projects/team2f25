@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from pypdf import PdfReader
 from docx import Document
 
+
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 
