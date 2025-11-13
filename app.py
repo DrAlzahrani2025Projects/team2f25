@@ -40,6 +40,56 @@ ui.inject_badge_css()
 ui.header(APP_TITLE, CSUSB_CSE_URL)
 init_cover_state()
 
+def render_links_as_assistant_message(results):
+    """Render a markdown chat message with links/title/company, and save it to chat history."""
+    # Remove duplicate links!
+    if results.empty or "link" not in results.columns:
+        return
+    df_deduped = results.drop_duplicates(subset=["link"], keep="first")
+    formatted_links = []
+    for _, row in df_deduped.iterrows():
+        url = row.get("link", "")
+        comp = row.get("company", "") or ""
+        title = row.get("title", "") or ""
+        # Markdown format: [title] — company, or with fallback
+        if title and comp:
+            formatted_links.append(f"[{title}]({url}) — {comp}")
+        elif title:
+            formatted_links.append(f"[{title}]({url})")
+        elif comp:
+            formatted_links.append(f"[{comp}]({url})")
+        elif url:
+            formatted_links.append(f"{url}")
+    if formatted_links:
+        links_chat = "\n".join(formatted_links)
+        ui.render_msg("assistant", links_chat)
+        st.session_state.messages.append({"role": "assistant", "content": links_chat})
+
+
+# --- PERSISTENT INTERNSHIP LINK DISPLAY --- #
+
+# Initialize "all links" on first page load, if not present in session_state
+if "csusb_links" not in st.session_state:
+    # You’d replace this with your real scraping call, but this guarantees it’s always present
+    st.session_state.csusb_links = []
+
+# Always show current filtered links or all links, BEFORE chat, EVERY rerun
+def show_persistent_links():
+    filtered_links = st.session_state.get("filtered_links")
+    filter_desc = st.session_state.get("current_filter", None)
+    if filtered_links:
+        st.markdown(
+            f"### Internship Links: {filter_desc if filter_desc else 'Filtered Results'}"
+        )
+        for link in filtered_links:
+            st.markdown(f"- [{link}]({link})")
+    else:
+        st.markdown("### All Internship Links")
+        for link in st.session_state.get("csusb_links", []):
+            st.markdown(f"- [{link}]({link})")
+# show_persistent_links()
+
+
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
@@ -326,30 +376,52 @@ elif intent == "internship_search":
         results = results[keep_cols].drop_duplicates(subset=["link"], keep="first")
     else:
         results = results[keep_cols].drop_duplicates()
+    # --- PERSISTENT FILTERED LINKS: STORE IN SESSION_STATE FOR DISPLAY AT TOP ---
+    if results.empty:
+     st.session_state.filtered_links = []
+     st.session_state.current_filter = None 
+    elif show_all:
+     st.session_state.filtered_links = list(results["link"]) if "link" in results.columns else []
+     st.session_state.current_filter = "All"
+    elif applied_any_filter:
+     st.session_state.filtered_links = list(results["link"]) if "link" in results.columns else []
+    # Pick a useful filter name/label
+     st.session_state.current_filter = (
+        str(filt.get("company_name")) or
+        " & ".join(filt.get("title_keywords") or []) or
+        " & ".join(filt.get("skills") or []) or "Filtered"
+    )
+    else:
+     st.session_state.filtered_links = []
+     st.session_state.current_filter = None
+
     if show_all:
         summary = f"Here are **all {len(results)}** links listed on the CSUSB CSE page."
     elif applied_any_filter:
         summary = f"Here are **{len(results)}** matching link(s) from the CSUSB CSE page."
     else:
         summary = f"I found **{len(results)}** link(s). Ask for a company (e.g., 'nasa') or say 'show all internships'."
+            
+
     ui.render_msg("assistant", summary)
     st.session_state.messages.append({"role": "assistant", "content": summary})
-    ui.render_links_in_chat(results, limit=50)
-    ui.render_found_links_table(results)
 
+    render_links_as_assistant_message(results)
+    
+    ui.render_found_links_table(results)
 else:
-    t = user_msg.strip().lower()
-    if any(g in t for g in ["hi", "hello", "hey"]):
+     t = user_msg.strip().lower()
+     if any(g in t for g in ["hi", "hello", "hey"]):
         reply = "Hi! Ask me about internships (company/tech/term) or upload your résumé for questions about your experience."
-    elif "what is this" in t or "about" in t:
+     elif "what is this" in t or "about" in t:
         reply = ("This app lists internship-related links from the CSUSB CSE website "
                  "and lets you ask simple résumé questions. No deep web search is performed.")
-    elif "download" in t or "csv" in t:
+     elif "download" in t or "csv" in t:
         reply = "Use the “Download Results (CSV)” button below the table to save the links."
-    elif "refresh" in t or "latest" in t:
+     elif "refresh" in t or "latest" in t:
         reply = "Type ‘refresh’ in an internship request and I’ll pull the latest CSUSB CSE links."
-    else:
+     else:
         reply = ("I can help with internships (company, technology, term) or simple résumé questions. "
                  "Try: ‘summer software internships’, ‘Nasa internships’, or ‘What skills are on my résumé?’")
-    ui.render_msg("assistant", reply)
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+     ui.render_msg("assistant", reply)
+     st.session_state.messages.append({"role": "assistant", "content": reply})

@@ -62,10 +62,21 @@ def _ollama_cover_letter(profile: Dict[str, str], resume_text: str, job_text: st
         return None
 
     sys_msg = (
-        "You are a detail-oriented career assistant. Draft a one-page, professional cover letter "
-        "tailored to the target role using the user’s resume/profile. Keep it concise (<= 350 words), "
-        "specific to the job, and ATS-friendly. Return ONLY the letter text, no markdown or JSON."
+    "You are a professional career assistant. Write a one-page, ATS-friendly cover letter for a job application. "
+    "The letter should:\n"
+    "- Address the hiring manager and mention the company/organization by name (if 'company' is provided or can be inferred from the job link or description).\n"
+    "- Clearly state the applicant's interest in the specific role at the company and explain why the applicant is a strong fit (drawing only from the provided profile, resume, and job description fields).\n"
+    "- Summarize the candidate’s most relevant experience and skills in a narrative style (do NOT list resume sections, bullet points, or copy section headers).\n"
+    "- Reference the company's mission, values, or notable projects ONLY IF the job description or provided input includes them.\n"
+    "- Maintain a positive, concise, and confident tone throughout (no generic clichés, no filler).\n"
+    "- Close politely and with enthusiasm for the opportunity.\n"
+    "Strict rules:\n"
+    "- Do NOT copy or list raw resume text or section names (e.g., 'EXPERIENCE', 'PROJECTS').\n"
+    "- Do NOT invent or use placeholder text for missing fields (just omit them).\n"
+    "- Only mention factual elements supported by the user's real data or the job/company description.\n"
+    "- Return ONLY the actual letter as continuous text (no markdown, no bullet points, no JSON, no YAML, no extra explanations).\n"
     )
+
 
     # --- Enhancement: include parsed resume JSON if available ---
     user_blob = {
@@ -91,13 +102,13 @@ def _ollama_cover_letter(profile: Dict[str, str], resume_text: str, job_text: st
 
 def _template_fallback(profile: Dict[str, str], resume_text: str, job_text: str) -> str:
     """Simple, clean fallback letter if the LLM path isn't available."""
-    name = profile.get("full_name", "Your Name")
-    email = profile.get("email", "email@example.com")
-    phone = profile.get("phone", "000-000-0000")
+    name = profile.get("full_name")
+    email = profile.get("email")
+    phone = profile.get("phone")
     city = profile.get("city", "")
-    target = profile.get("role_interest", "the role")
-    highlights = profile.get("highlights", "")
-    extras = profile.get("extras", "")
+    target = profile.get("role_interest")
+    highlights = profile.get("highlights")
+    extras = profile.get("extras")
 
     bullets = ""
     if highlights:
