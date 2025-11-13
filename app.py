@@ -257,12 +257,21 @@ ui.render_msg("user", user_msg)
 
 
 # --- PROACTIVE COVER LETTER FLOW OVERRIDE ---
+# Check if the user's message either:
+#  1) Mentions "cover letter" in a variety of phrasings (regex catches "cover letter",
+#     "make ... cover letter", "create ... cover letter", "draft ... cover letter"), OR
+#  2) Contains any URL (basic "http(s)://" detection).
 if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|draft.*cover\s*letter)\b", user_msg.lower()) \
    or re.search(r"https?://", user_msg.lower()):
-    # If the user pasted a link, save it as job target.
+    # If a link is present anywhere in the message, treat it as the target job posting.
+    # This lets users paste a URL and immediately kick off the cover-letter flow.
     if re.search(r"https?://", user_msg.lower()):
         set_target_url(user_msg)
+        # Begin the guided cover-letter information collection flow
+    # (asks the user for details/resume bits if needed).
     start_collection(render=ui.render_msg)
+       # Stop further Streamlit processing in this run so we don't
+    # fall through to other intent handlers or render duplicate UI.
     st.stop()
 
     # --- COVER LETTER PROFILE COLLECTION OVERRIDE ---
