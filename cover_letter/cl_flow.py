@@ -265,7 +265,9 @@ def _generate_and_show_letter(render: Callable[[str, str], None]) -> None:
     target_url = profile.get("role_interest") or st.session_state.get("cover_target_url") or ""
     resume_text = st.session_state.get("resume_text", "")
 
-    letter = make_cover_letter(profile=profile, resume_text=resume_text, target_url=target_url)
+    with st.spinner("💡 Generating your cover letter, please wait..."):
+        letter = make_cover_letter(profile=profile, resume_text=resume_text, target_url=target_url)
+        # Optional: add time.sleep(2) for demo, otherwise not needed
 
     record = {
         "ts": int(time.time()),
@@ -280,6 +282,7 @@ def _generate_and_show_letter(render: Callable[[str, str], None]) -> None:
 
     _show_download(record)
     st.session_state["collecting_cover_profile"] = False
+
 
 def _show_download(record: Dict[str, str]) -> None:
     try:
