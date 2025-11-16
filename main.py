@@ -21,6 +21,8 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from datetime import datetime
+
 # Local scraper (must exist in the same project directory)
 from scraper import scrape_csusb_listings
 
@@ -33,6 +35,28 @@ app = FastAPI(
     description="Returns links extracted from CSUSB CSE pages (no deep search).",
     version="1.0.0",
 )
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; "
+    "media-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; "
+    "object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+)
+
+
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+# (Only at Nginx for HTTPS) # response.headers["Strict-Transport-Security"] = ...
+
+    return response
+
 
 # In production, constrain origins as needed
 ALLOWED_ORIGINS = [
@@ -90,7 +114,14 @@ async def _get_df(force: bool = False) -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
+
+def _iso8601(ts: float) -> str:
+    try:
+        return datetime.utcfromtimestamp(ts).isoformat() + "Z"
+    except Exception:
+        return ""
 @app.get("/healthz", tags=["Health"])
+
 async def healthz():
     """
     Basic health with cache info.
@@ -98,16 +129,34 @@ async def healthz():
     try:
         df = _cache["df"]
         count = int(len(df)) if df is not None else 0
-        age = time.time() - float(_cache["at"]) if _cache["at"] else None
+        # Calculate age in minutes instead of raw seconds
+        age_sec = time.time() - float(_cache["at"]) if _cache["at"] else None
+        age_min = age_sec / 60 if age_sec is not None else None
+        # Generate ISO8601 timestamp for cache time
+        cached_at_iso = _iso8601(_cache["at"]) if _cache["at"] else ""
+        # TTL in minutes
+        ttl_min = CACHE_TTL / 60
+
         return {
             "status": "ok",
             "cached_count": count,
-            "cache_age_seconds": age,
-            "cache_ttl_seconds": CACHE_TTL,
+            "cached_at": cached_at_iso,
+            "cache_age_minutes": age_min,
+            "cache_ttl_minutes": ttl_min,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Health error: {e}")
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Health error: {e}")
+
+
+
+def _iso8601(ts: float) -> str:
+    try:
+        return datetime.utcfromtimestamp(ts).isoformat() + "Z"
+    except Exception:
+        return ""
 
 @app.get("/csusb/links", tags=["Links"])
 async def csusb_links(
@@ -119,14 +168,17 @@ async def csusb_links(
     try:
         df = await _get_df(force=refresh)
         items = df.to_dict(orient="records")
+        cached_at_iso = _iso8601(_cache["at"]) if _cache["at"] else ""
+        ttl_min = CACHE_TTL / 60
         return {
             "count": len(items),
-            "cached_at_unix": _cache["at"],
-            "cache_ttl_seconds": CACHE_TTL,
+            "cached_at": cached_at_iso,
+            "cache_ttl_minutes": ttl_min,
             "items": items,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scrape error: {e}")
+
 
 
 @app.get("/", tags=["Info"])

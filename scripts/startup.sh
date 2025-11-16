@@ -106,7 +106,7 @@ echo "Starting Docker container..."
 docker run -d \
   --name "${NAME}" \
   --network "${NET}" \
-  -p "${PORT}:${PORT}" \
+  -p "${PORT}:80" \
   -e "STREAMLIT_SERVER_PORT=${PORT}" \
   -e "STREAMLIT_SERVER_BASE_URL_PATH=${BASE_PATH}" \
   -e "MODEL_NAME=${MODEL_NAME}" \

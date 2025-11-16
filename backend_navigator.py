@@ -28,6 +28,29 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; "
+    "media-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; "
+    "object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+)
+
+
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+# (Only at Nginx for HTTPS) # response.headers["Strict-Transport-Security"] = ...
+
+    return response
+
+
+
 # ============================================================================
 # NAVIGATOR CLASS
 # ============================================================================
