@@ -1,20 +1,30 @@
-streamlit
-pandas
-pyarrow
-beautifulsoup4
-lxml
-tldextract
-playwright
+# --- Core app ---
+streamlit>=1.37,<1.41
+pandas>=2.2,<2.4
+pyarrow>=18,<23           
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<6
+requests>=2.32,<3        
+playwright>=1.56,<1.57     
+
+# --- API stack (FastAPI drives Starlette; don't pin Starlette separately) ---
+fastapi>=0.118,<0.122
+pydantic>=2.7,<3
+uvicorn[standard]>=0.34,<0.39 
+
+# --- LLM plumbing ---
 langchain==0.2.13
-langchain-ollama==0.1.1
 langchain-core==0.2.43
 langchain-text-splitters==0.2.4
-pypdf
-python-docx
-uvicorn
+langchain-ollama==0.1.1
+
+# --- Resume parsing ---
+pypdf>=4,<5
+python-docx>=1.1,<1.2
+
+
+tldextract
 fastapi==0.118.0
-pydantic
-httpx
 setuptools==78.1.1
 pip==25.3
 starlette==0.48.0
