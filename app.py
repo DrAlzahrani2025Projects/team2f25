@@ -434,3 +434,4 @@ else:
                  "Try: ‘summer software internships’, ‘Nasa internships’, or ‘What skills are on my résumé?’")
      ui.render_msg("assistant", reply)
      st.session_state.messages.append({"role": "assistant", "content": reply})
+##
