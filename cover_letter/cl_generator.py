@@ -1,8 +1,6 @@
 # cl_generator.py
 # Generates a tailored cover letter using an LLM (Ollama via LangChain).
 # Robust job-text extraction: Playwright first, then requests+BeautifulSoup fallback.
-# If LLM is unavailable, falls back to a clean, ATS-friendly template letter.
-
 from __future__ import annotations
 from typing import Dict, Optional
 import json
