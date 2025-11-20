@@ -363,7 +363,12 @@ elif intent == "internship_search":
     if "host" not in df_all.columns:
         df_all["host"] = df_all["link"].map(lambda u: urlparse(u).netloc if isinstance(u, str) else "")
     try:
-        filt: Dict = parse_query_to_filter(user_msg) or {}
+        filt: Dict = parse_query_to_filter(default_llm, user_msg) or {}
+        print()
+        print("Filter:")
+        print()
+        print(filt)
+        print()
     except Exception:
         filt = {}
     show_all = bool(filt.get("show_all"))
@@ -371,6 +376,11 @@ elif intent == "internship_search":
     applied_any_filter = False
     def _low(s: pd.Series) -> pd.Series:
         return s.astype(str).str.lower().fillna("")
+    print()
+    print("CompanyName:")
+    print()
+    print(filt.get("company_name"))
+    print()
     company = str(filt.get("company_name") or "").strip().lower()
     if company:
         import re as _re

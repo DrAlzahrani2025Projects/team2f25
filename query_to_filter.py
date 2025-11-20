@@ -76,8 +76,13 @@ def _llm_json(llm, sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=
         # Extract JSON from the response (regex for { ... } structure)
         m = re.search(r"\{[\s\S]*\}", out)
         return json.loads(m.group(0) if m else out)
-    except Exception:
+    except Exception as e:
         # Fallback to empty dict if LLM fails
+        print()
+        print("Exception:")
+        print()
+        print(f"An error occurred: {type(e).__name__} – {e}")
+        print()
         return {}
 
 # ============================================================
@@ -103,7 +108,7 @@ def _extract_skills_and_keywords(s: str) -> tuple[list[str], list[str]]:
 # ============================================================
 # MAIN: QUERY PARSER
 # ============================================================
-def parse_query_to_filter(q: str) -> Dict[str, Any]:
+def parse_query_to_filter(llm, q: str) -> Dict[str, Any]:
     """
     Turn a free-text user query into a structured filter dictionary.
     Returns a compact dict, e.g.:
@@ -148,8 +153,14 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
 
     # ---- Step 1: LLM extraction (optional) ----
     data: Dict[str, Any] = {}
+    print()
+    print("data:")
+    print()
+    for key, value in data.items():
+        print(f"{key}: {value}")
+    print()
     if USE_OLLAMA:
-        data = _llm_json(sys, s, num_ctx=2048, num_predict=160, temp=0.2)
+        data = _llm_json(llm, sys, s, num_ctx=2048, num_predict=160, temp=0.2)
         if not isinstance(data, dict):
             data = {}
 
