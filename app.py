@@ -344,6 +344,7 @@ if intent == "resume_question":
     ui.render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
+#general question intent
 elif intent in ("general_question", "out_of_scope", "other"):
     def handle_general_question(user_msg: str):
      """
