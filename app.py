@@ -326,6 +326,46 @@ if intent == "resume_question":
     ui.render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
+elif intent in ("general_question", "out_of_scope", "other"):
+    def handle_general_question(user_msg: str):
+     """
+     Ensures the LLM only responds with a strict message for out-of-scope questions.
+     NEVER answers general questions, always prompts user to ask only about CSUSB CSE internships.
+    """
+    system_instruction = (
+        "You are a CSUSB CSE internship help bot. "
+        "If the user's question is NOT about internships at CSUSB CSE, résumé, or cover letters, "
+        "DO NOT answer the question, DO NOT provide facts or information. "
+        "Reply ONLY with: 'Please ask only about CSUSB CSE internship-related questions.'"
+    )
+
+    from langchain_ollama import ChatOllama
+    from langchain_core.prompts import ChatPromptTemplate
+
+    llm = ChatOllama(
+        base_url=OLLAMA_HOST,
+        model=MODEL_NAME,
+        temperature=0.0,
+        streaming=False,
+        model_kwargs={"num_ctx": 256, "num_predict": 30}
+    )
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_instruction),
+        ("human", user_msg)
+    ])
+    response = (prompt | llm).invoke({})
+    llm_reply = response.content if hasattr(response, "content") else str(response)
+
+    # Guardrail: If LLM malfunctions and gives info, override with the strict message
+    strict_reply = "Please ask only about CSUSB CSE internship-related questions."
+    if strict_reply.lower() not in llm_reply.lower():
+        llm_reply = strict_reply
+
+    ui.render_msg("assistant", llm_reply)
+    st.session_state.messages.append({"role": "assistant", "content": llm_reply})
+
+
+
 elif intent == "internship_search":
     need_refresh = (cache_age_hours() > 24) or any(w in user_msg.lower() for w in ["refresh", "reload", "latest"])
     csusb_df = load_cached_df()
