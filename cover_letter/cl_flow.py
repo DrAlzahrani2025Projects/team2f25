@@ -173,16 +173,28 @@ def handle_user_message(llm, message_text: str, render: Callable[[str, str], Non
             return True
 
     if st.session_state.get("collecting_cover_profile"):
-        if low in {"done", "uploaded", "i uploaded", "resume uploaded"}:
-            if (st.session_state.get("resume_text") or "").strip():
-                _drive_once(llm, "", render)
-            else:
-                render("assistant", "I still don’t see a resume. Please upload it in the left sidebar and then say “done”.")
+            from .cl_state import next_unanswered_key, set_profile_field
+    next_needed = next_unanswered_key()
+    msg_clean = msg.strip()
+    # Phone - accept if expecting and looks like a phone number
+    if next_needed == "phone":
+        if re.search(r"\+?\d[\d\s\-().]{7,}", msg_clean):
+            set_profile_field("phone", msg_clean)
+            _drive_once(llm, "", render)
             return True
-        _drive_once(llm, msg, render)
-        return True
+    # Email - accept if expecting and looks like an email address
+    if next_needed == "email":
+        if re.search(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", msg_clean):
+            set_profile_field("email", msg_clean)
+            _drive_once(llm, "", render)
+            return True
+    # City (optional): if expecting city, just accept anything
+    if next_needed == "city":
+        if msg_clean:  # Accept any response
+            set_profile_field("city", msg_clean)
+            _drive_once(llm, "", render)
+            return True
 
-    return False
 
 def _drive_once(llm, user_msg: str, render: Callable[[str, str], None]) -> None:
     if not (st.session_state.get("resume_text") or "").strip() and st.session_state.get("asked_for_resume"):
