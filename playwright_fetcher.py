@@ -1,7 +1,6 @@
 """
 playwright_fetcher.py
 CSUSB-focused Playwright utilities to fetch HTML and extract links.
-- No LLM usage.
 - No deep navigation of external company career sites.
 - Includes an internal crawler that stays on CSUSB CSE hosts only.
 """
@@ -163,7 +162,7 @@ class PlaywrightFetcher:
                     # allow minimal time for lazy content
                     await page.wait_for_timeout(self.wait_ms)
                     try:
-                        # optional: small idle wait; ignore if not reached
+                        # small idle wait; ignore if not reached
                         await page.wait_for_load_state("networkidle", timeout=1000)
                     except Exception:
                         pass
@@ -231,7 +230,7 @@ class PlaywrightFetcher:
                         html = await page.content()
                         seen_pages.add(current)
 
-                        # Extract links from this page
+                        # Extract links from this page internships
                         links = _extract_links(html, base_url=current)
 
                         # Keep only links within the allowed hosts; enqueue HTML pages we haven't seen
@@ -248,7 +247,7 @@ class PlaywrightFetcher:
                                 collected.append(link)
                                 seen_links.add(url)
 
-                            # Enqueue additional pages to crawl (same host)
+                            # Enqueue additional pages to crawl internships (same host)
                             # Only enqueue HTML-like pages (avoid PDFs/images)
                             path = urlparse(url).path.lower()
                             if any(path.endswith(ext) for ext in (".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".zip")):
