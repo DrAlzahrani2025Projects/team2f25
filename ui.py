@@ -118,17 +118,39 @@ def set_app_background(image_path: str, darken: float = 0.45):
     if not b64:
         # graceful fallback: gradient
         st.markdown(
-            """
-            <style>
-              html,body,[data-testid="stAppViewContainer"],.stApp{
-                background: radial-gradient(1200px 800px at 20% 10%, #0ea5e9 0%, transparent 35%),
-                            radial-gradient(1000px 600px at 80% 20%, #22c55e 0%, transparent 35%),
-                            linear-gradient(180deg, #0b1220 0%, #0b1220 100%) !important;
-              }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+    f"""
+    <style>
+      html, body, [data-testid="stAppViewContainer"], .stApp {{
+        height: 100%;
+        background:
+          linear-gradient(rgba(0,0,0,{darken}), rgba(0,0,0,{darken})),
+          url("data:image/png;base64,{b64}") center / cover no-repeat !important; /* removed 'fixed' */
+        isolation: isolate; /* new stacking context helps WebKit compositing */
+      }}
+      .block-container, .main, [data-testid="stHeader"], [data-testid="stToolbar"] {{
+        background: transparent !important;
+      }}
+      [data-testid="stSidebar"] {{
+        background: rgba(255,255,255,0.70) !important;
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+      }}
+
+      /* Safari: force no blur & ensure solid background to avoid black boxes */
+      @supports (-webkit-touch-callout: none){{
+        [data-testid="stSidebar"]{{
+          -webkit-backdrop-filter:none; backdrop-filter:none;
+          background: rgba(255,255,255,.88) !important;
+          @supports not (-webkit-touch-callout: none){{
+        html, body, [data-testid="stAppViewContainer"], .stApp{{
+          background-attachment: fixed;  /* keep parallax on non-Safari */
+        }}
+      }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
         return
 
     st.markdown(

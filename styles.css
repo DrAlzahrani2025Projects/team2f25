@@ -39,13 +39,36 @@ html, body, [data-testid="stAppViewContainer"] {
 footer { visibility: hidden; }
 
 /* Sidebar */
-section[data-testid="stSidebar"] > div{
-  background:var(--sidebar) !important;
-  border-radius:24px !important;
-  margin:12px;
-  padding-top:8px;
-  box-shadow:var(--bubble-shadow);
-  border:1px solid rgba(255,255,255,.06);
+/* Sidebar: translucent, blur where supported */
+[data-testid="stSidebar"]{
+  background: rgba(255,255,255,.70);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Small chips: subtle translucency, no blur by default */
+.chip{
+  display:inline-flex;align-items:center;gap:.4rem;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:999px;padding:.28rem .6rem;
+  background: rgba(255,255,255,.6);
+}
+
+/* If blur isn't supported (or is disabled by macOS accessibility),
+   fall back to an opaque-ish background so we don't get black boxes */
+@supports not ((-webkit-backdrop-filter: none) or (backdrop-filter: none)){
+  [data-testid="stSidebar"]{ background: rgba(255,255,255,.88); }
+  .chip{ background: rgba(255,255,255,.88); }
+}
+
+/* Safari-specific guard: disable blur where it still artifacts */
+@supports (-webkit-touch-callout: none){
+  [data-testid="stSidebar"]{
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(255,255,255,.88);
+  }
+  .chip{ background: rgba(255,255,255,.88); }
 }
 
 /* Inputs */
