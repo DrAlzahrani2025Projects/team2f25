@@ -20,6 +20,11 @@ import streamlit as st
 from urllib.parse import urlparse
 
 import ui  # all UI helpers live here
+import os
+
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+
 from scraper import scrape_csusb_listings, CSUSB_CSE_URL
 from query_to_filter import parse_query_to_filter, classify_intent
 from resume_parser import extract_resume_text, llm_resume_extract, save_resume, answer_from_resume
@@ -419,18 +424,33 @@ elif intent == "internship_search":
     
     ui.render_found_links_table(results)
 else:
-     t = user_msg.strip().lower()
-     if any(g in t for g in ["hi", "hello", "hey"]):
-        reply = "Hi! Ask me about internships (company/tech/term) or upload your résumé for questions about your experience."
-     elif "what is this" in t or "about" in t:
-        reply = ("This app lists internship-related links from the CSUSB CSE website "
-                 "and lets you ask simple résumé questions. No deep web search is performed.")
-     elif "download" in t or "csv" in t:
-        reply = "Use the “Download Results (CSV)” button below the table to save the links."
-     elif "refresh" in t or "latest" in t:
-        reply = "Type ‘refresh’ in an internship request and I’ll pull the latest CSUSB CSE links."
-     else:
-        reply = ("I can help with internships (company, technology, term) or simple résumé questions. "
-                 "Try: ‘summer software internships’, ‘Nasa internships’, or ‘What skills are on my résumé?’")
-     ui.render_msg("assistant", reply)
-     st.session_state.messages.append({"role": "assistant", "content": reply})
+    t = user_msg.strip().lower()
+    GREETINGS = {
+        "hi", "hello", "hey", "how are you", "good morning", "good afternoon", "good evening"
+    }
+    if any(greet in t for greet in GREETINGS):
+        # LLM prompt for small talk
+        sys_prompt = "If the user greets you or asks how you are, respond with a friendly, brief small talk. Add warmth and offer help."
+        
+        from langchain_ollama import ChatOllama
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        # Set up your LLM model (assuming your env/model setup is done at the top of your file)
+        llm = ChatOllama(
+            base_url=OLLAMA_HOST,  # already set in your config
+            model=MODEL_NAME,
+            temperature=0.5,
+            streaming=False,
+            model_kwargs={"num_ctx": 512, "num_predict": 60}
+        )
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", sys_prompt),
+            ("human", t)
+        ])
+        resp = (prompt | llm).invoke({})
+        reply = resp.content if hasattr(resp, "content") else str(resp)
+        
+        ui.render_msg("assistant", reply)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        
