@@ -3,7 +3,6 @@
 # - LLM-first intent routing via query_to_filter.classify_intent
 # - Internship: CSUSB-only links (no deep search)
 # - Resume: upload + deterministic Q&A using your resume_parser
-# - General: concise non-LLM reply
 
 from __future__ import annotations
 
@@ -282,11 +281,11 @@ ui.render_msg("user", user_msg)
 # --- PROACTIVE COVER LETTER FLOW OVERRIDE ---
 # Check if the user's message either:
 #  1) Mentions "cover letter" in a variety of phrasings (regex catches "cover letter",
-#     "make ... cover letter", "create ... cover letter", "draft ... cover letter"), OR
+#     "make ... cover letter", "create ..... cover letter", "draft ... cover letter"), OR
 #  2) Contains any URL (basic "http(s)://" detection).
 if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|draft.*cover\s*letter)\b", user_msg.lower()) \
    or re.search(r"https?://", user_msg.lower()):
-    # If a link is present anywhere in the message, treat it as the target job posting.
+    # If a link is present anywhere, treat it as the target job posting.
     # This lets users paste a URL and immediately kick off the cover-letter flow.
     if re.search(r"https?://", user_msg.lower()):
         set_target_url(user_msg)
@@ -297,7 +296,7 @@ if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|dra
     # fall through to other intent handlers or render duplicate UI.
     st.stop()
 
-    # --- COVER LETTER PROFILE COLLECTION OVERRIDE ---
+    # --- COVER LETTER PROFILE OVERRIDE ---
 if st.session_state.get("collecting_cover_profile", False):
     cl_flow_handle_user_message(planner_llm, user_msg, ui.render_msg)
     st.stop()
@@ -344,7 +343,7 @@ if intent == "resume_question":
     ui.render_msg("assistant", reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
-#general question intent
+#general question intent only
 elif intent in ("general_question", "out_of_scope", "other"):
     def handle_general_question(user_msg: str):
      """
