@@ -132,8 +132,10 @@ def _collect_links(page_html: str, base: str) -> List[Dict]:
 def scrape_csusb_listings(
     url: str = CSUSB_CSE_URL,
     timeout_ms: int = TIMEOUT_MS,
-    deep: bool = False,          # kept only for backward compatibility; ignored
-    max_pages: int = MAX_PAGES,  # kept only for backward compatibility; ignored
+    deep: bool = False,          
+    # kept only for backward compatibility; ignored
+    max_pages: int = MAX_PAGES,  
+    # kept only for backward compatibility; ignored
 ) -> pd.DataFrame:
     """
     Scrape CSUSB CSE internships page and return candidate destination links.
