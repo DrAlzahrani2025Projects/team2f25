@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import Callable, Dict, Any, List, Optional
 import json
-import os
+
 import time
 import re
 import streamlit as st
-import langchain_ollama as ChatOllama
+
 
 
 from .cl_state import (
@@ -29,23 +29,11 @@ def _results_preview(df) -> List[Dict[str, str]]:
         pass
     return out
 
-def _llm():
-    try:
-        from langchain_ollama import ChatOllama
-    except Exception:
-        return None
-    base = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-    model = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
-    try:
-        return ChatOllama(base_url=base, model=model, temperature=0.2, streaming=False)
-    except Exception:
-        return None
-
 def _default_render(role: str, content: str) -> None:
     with st.chat_message(role):
         st.write(content)
 
-def _plan_next_step(user_msg: str) -> Dict[str, Any]:
+def _plan_next_step(llm, user_msg: str) -> Dict[str, Any]:
     profile = get_profile()
     resume_text = st.session_state.get("resume_text", "")
     resume_json = st.session_state.get("resume_json", {})
@@ -75,7 +63,7 @@ def _plan_next_step(user_msg: str) -> Dict[str, Any]:
                     target_url = url
                     patched = True
 
-    planner = _llm()
+    planner = llm
     def _fallback() -> Dict[str, Any]:
         if not target_url:
             return {"action": "ask", "field": "role_interest",
@@ -133,7 +121,7 @@ def offer_cover_letter(render: Callable[[str, str], None] = _default_render) -> 
         st.session_state["want_cover_letter"] = True
         render("assistant", "Want me to draft a tailored cover letter? I’ll ask a couple of quick questions, use your resume, and generate a download.")
 
-def start_collection(render: Callable[[str, str], None] = _default_render) -> None:
+def start_collection(llm, render: Callable[[str, str], None] = _default_render) -> None:
     init_cover_state()
     st.session_state["collecting_cover_profile"] = True
 
@@ -148,12 +136,12 @@ def start_collection(render: Callable[[str, str], None] = _default_render) -> No
         if url_col:
             set_target_url(str(df.iloc[0][url_col]))
 
-    _drive_once("", render)
+    _drive_once(llm, "", render)
 
-def ask_next_question(render: Callable[[str, str], None] = _default_render) -> None:
-    _drive_once("", render)
+def ask_next_question(llm, render: Callable[[str, str], None] = _default_render) -> None:
+    _drive_once(llm, "", render)
 
-def handle_user_message(message_text: str, render: Callable[[str, str], None] = _default_render) -> bool:
+def handle_user_message(llm, message_text: str, render: Callable[[str, str], None] = _default_render) -> bool:
     init_cover_state()
     msg = (message_text or "").strip()
     low = msg.lower()
@@ -168,7 +156,7 @@ def handle_user_message(message_text: str, render: Callable[[str, str], None] = 
                 if url_col:
                     set_target_url(str(df.iloc[idx][url_col]))
                     st.session_state["collecting_cover_profile"] = True
-                    _drive_once("", render)
+                    _drive_once(llm, "", render)
                     return True
         except Exception:
             pass
@@ -176,32 +164,32 @@ def handle_user_message(message_text: str, render: Callable[[str, str], None] = 
     if st.session_state.get("want_cover_letter") and not st.session_state.get("collecting_cover_profile"):
         if any(w in low for w in ["yes", "yep", "sure", "ok", "okay", "please", "start", "begin", "create", "make one", "draft"]):
             st.session_state["collecting_cover_profile"] = True
-            _drive_once(msg, render)
+            _drive_once(llm, msg, render)
             return True
         if low.startswith("http://") or low.startswith("https://"):
             set_target_url(msg)
             st.session_state["collecting_cover_profile"] = True
-            _drive_once("", render)
+            _drive_once(llm, "", render)
             return True
 
     if st.session_state.get("collecting_cover_profile"):
         if low in {"done", "uploaded", "i uploaded", "resume uploaded"}:
             if (st.session_state.get("resume_text") or "").strip():
-                _drive_once("", render)
+                _drive_once(llm, "", render)
             else:
                 render("assistant", "I still don’t see a resume. Please upload it in the left sidebar and then say “done”.")
             return True
-        _drive_once(msg, render)
+        _drive_once(llm, msg, render)
         return True
 
     return False
 
-def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
+def _drive_once(llm, user_msg: str, render: Callable[[str, str], None]) -> None:
     if not (st.session_state.get("resume_text") or "").strip() and st.session_state.get("asked_for_resume"):
         render("assistant", "Once your resume is uploaded in the sidebar, just type “done”.")
         return
 
-    step = _plan_next_step(user_msg)
+    step = _plan_next_step(llm, user_msg)
     act = step.get("action")
 
     if act == "ask" and step.get("field") == "city":
@@ -211,14 +199,14 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
             print("DEBUG: Emergency fallback: city set to", msg)
             print("DEBUG: profile after city fallback:", get_profile())
             # Now re-invoke planner to progress
-            step = _plan_next_step("")
+            step = _plan_next_step(llm, "")
             act = step.get("action")
     if act == "answer":
         txt = (step.get("text") or "").strip() or "Here’s what I recommend."
         render("assistant", txt)
         st.session_state.messages.append({"role": "assistant", "content": txt})
 
-        step = _plan_next_step("")
+        step = _plan_next_step(llm, "")
 
         act = step.get("action")
 
@@ -234,14 +222,14 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
         if field and value:
             set_profile_field(field, value)
             print("DEBUG: set field", field, "=", value)
-        _drive_once("", render)
+        _drive_once(llm, "", render)
         return
 
     if act == "set_url":
         url = (step.get("url") or "").strip()
         if url:
             set_target_url(url)
-        _drive_once("", render)
+        _drive_once(llm, "", render)
         return
 
     if act == "fetch_company":
@@ -254,19 +242,19 @@ def _drive_once(user_msg: str, render: Callable[[str, str], None]) -> None:
         return
 
     if act == "generate":
-        _generate_and_show_letter(render)
+        _generate_and_show_letter(llm, render)
         return
 
     render("assistant", "Please paste the job link, or tell me a company/title to target.")
     st.session_state.messages.append({"role": "assistant", "content": "Please paste the job link, or tell me a company/title to target."})
 
-def _generate_and_show_letter(render: Callable[[str, str], None]) -> None:
+def _generate_and_show_letter(llm, render: Callable[[str, str], None]) -> None:
     profile: Dict[str, str] = get_profile()
     target_url = profile.get("role_interest") or st.session_state.get("cover_target_url") or ""
     resume_text = st.session_state.get("resume_text", "")
 
     with st.spinner("💡 Generating your cover letter, please wait..."):
-        letter = make_cover_letter(profile=profile, resume_text=resume_text, target_url=target_url)
+        letter = make_cover_letter(llm, profile=profile, resume_text=resume_text, target_url=target_url)
         # Optional: add time.sleep(2) for demo, otherwise not needed
 
     record = {

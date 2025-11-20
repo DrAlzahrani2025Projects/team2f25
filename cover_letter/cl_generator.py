@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 from typing import Dict, Optional
-import os
 import json
 import streamlit as st  # for accessing session resume_json (optional)
 
@@ -50,7 +49,7 @@ def _fetch_job_text_fallback(url: str) -> str:
     except Exception:
         return ""
 
-def _ollama_cover_letter(profile: Dict[str, str], resume_text: str, job_text: str) -> Optional[str]:
+def _ollama_cover_letter(llm, profile: Dict[str, str], resume_text: str, job_text: str) -> Optional[str]:
     """
     Try to generate with LangChain + Ollama. Return None if unavailable or fails.
     Includes resume_json from session state if present.
@@ -86,11 +85,7 @@ def _ollama_cover_letter(profile: Dict[str, str], resume_text: str, job_text: st
         "job_excerpt": job_text,
     }
 
-    model = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
-    base_url = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-
     try:
-        llm = ChatOllama(base_url=base_url, model=model, temperature=0.2)
         prompt = ChatPromptTemplate.from_messages([("system", sys_msg), ("human", "{data}")])
         chain = prompt | llm
         out = chain.invoke({"data": json.dumps(user_blob, ensure_ascii=False)})
@@ -141,7 +136,7 @@ def _template_fallback(profile: Dict[str, str], resume_text: str, job_text: str)
     lines.append(name)
     return "\n".join(lines)
 
-def make_cover_letter(profile: Dict[str, str], resume_text: str, target_url: str) -> str:
+def make_cover_letter(llm, profile: Dict[str, str], resume_text: str, target_url: str) -> str:
     """
     Fetch job text (Playwright -> requests/BS fallback),
     then attempt LLM generation, fallback to template.
@@ -152,7 +147,7 @@ def make_cover_letter(profile: Dict[str, str], resume_text: str, target_url: str
         job_text = _fetch_job_text_fallback(target_url)
 
     # --- LLM ---
-    generated = _ollama_cover_letter(profile, resume_text or "", job_text)
+    generated = _ollama_cover_letter(llm, profile, resume_text or "", job_text)
     if generated:
         return generated
 
