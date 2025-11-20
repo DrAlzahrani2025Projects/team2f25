@@ -26,6 +26,7 @@ def _read_pdf(b: bytes) -> str:
             out.append(p.extract_text() or "")
         except Exception:
             continue
+    print(out)
     return "\n".join(out)
 
 def _read_docx(b: bytes) -> str:
@@ -94,7 +95,7 @@ def llm_structured_resume(resume_text: str) -> Dict[str, Any]:
         return {}
 
 # ---------- LLM: router (is the user asking about résumé?) ----------
-def llm_is_resume_question(user_text: str) -> bool:
+def llm_is_resume_question(llm, user_text: str) -> bool:
     system = (
         "Return JSON only. Decide if the user is asking about the résumé on file "
         'with yes/no: {{"resume_q": true|false}}. '
@@ -105,7 +106,7 @@ def llm_is_resume_question(user_text: str) -> bool:
         ("system", system),
         ("human", "{q}")
     ])
-    out = (prompt | _llm(model_temp=0.0, num_ctx=512, num_pred=20)).invoke({"q": user_text}).content
+    out = (prompt | llm).invoke({"q": user_text}).content
     m = re.search(r"\{[\s\S]*\}", out or "")
     try:
         d = json.loads(m.group(0) if m else out)

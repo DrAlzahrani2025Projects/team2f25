@@ -52,7 +52,7 @@ GREETINGS = {
 # LLM HELPER FUNCTION
 # ============================================================
 
-def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str, Any]:
+def _llm_json(llm, sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) -> Dict[str, Any]:
     """
     Calls a local Ollama model via LangChain to extract structured JSON.
     Returns {} on any failure so the rest of the app can continue.
@@ -65,18 +65,10 @@ def _llm_json(sys_msg: str, user: str, num_ctx=2048, num_predict=160, temp=0.1) 
         temp:     Sampling temperature (low = deterministic).
     """
     try:
-        from langchain_ollama import ChatOllama
         from langchain.prompts import ChatPromptTemplate
 
         # Compose a prompt template with both system and user messages
         tmpl = ChatPromptTemplate.from_messages([("system", sys_msg), ("human", "{q}")])
-
-        # Initialize the Ollama LLM
-        llm = ChatOllama(
-            base_url=OLLAMA_HOST, model=MODEL_NAME,
-            temperature=temp, streaming=False,
-            model_kwargs={"num_ctx": num_ctx, "num_predict": num_predict},
-        )
 
         # Invoke the chain with the user text
         out = (tmpl | llm).invoke({"q": user}).content
@@ -217,7 +209,7 @@ def parse_query_to_filter(q: str) -> Dict[str, Any]:
 # INTENT CLASSIFIER
 # ============================================================
 
-def classify_intent(q: str) -> str:
+def classify_intent(llm, q: str) -> str:
     """
     Determine 'internship_search' vs 'resume_question' vs 'general_question'
     with LLM as the source of truth. Falls back only if LLM is unavailable.
@@ -228,6 +220,7 @@ def classify_intent(q: str) -> str:
 
     if USE_OLLAMA:
         d = _llm_json(
+            llm,
             (
                 "Classify the user's message into exactly one of these labels:\n"
                 "- internship_search: user wants internships, companies, roles, skills, or terms\n"
