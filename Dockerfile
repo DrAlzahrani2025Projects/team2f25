@@ -29,7 +29,7 @@ RUN playwright install chromium && \
     playwright install-deps chromium
 
 # Copy application files
-COPY app.py main.py scraper.py resume_manager.py playwright_fetcher.py resume_parser.py query_to_filter.py backend_navigator.py ui.py entrypoint.sh ./
+COPY app.py main.py scraper.py resume_manager.py playwright_fetcher.py resume_parser.py query_to_filter.py backend_navigator.py ui.py llm.py entrypoint.sh ./
 COPY assets/ ./assets
 COPY cover_letter/ ./cover_letter
 COPY styles.css ./
