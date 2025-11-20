@@ -85,7 +85,7 @@ def extract_resume_text(uploaded_file) -> str:
     
 
 # ---------- LLM extraction ----------
-def llm_resume_extract(resume_text: str) -> Dict[str, Any]:
+def llm_resume_extract(llm, resume_text: str) -> Dict[str, Any]:
     """
     Uses a single {resume_text} variable and escapes all braces in the prompt
     so ChatPromptTemplate never sees stray placeholders.
@@ -115,14 +115,6 @@ def llm_resume_extract(resume_text: str) -> Dict[str, Any]:
         ("system", system),
         ("human", "RESUME TEXT:\n{resume_text}\n\nReturn JSON now.")
     ])
-
-    llm = ChatOllama(
-        base_url=OLLAMA_HOST,
-        model=MODEL_NAME,
-        temperature=0.1,
-        streaming=False,
-        model_kwargs={"num_ctx": 4096, "num_predict": 350}
-    )
 
     # Truncate to keep it snappy
     text = (resume_text or "").strip()
