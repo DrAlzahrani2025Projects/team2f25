@@ -1,6 +1,5 @@
 """
 playwright_fetcher.py
-CSUSB-focused Playwright utilities to fetch HTML and extract links.
 - No deep navigation of external company career sites.
 - Includes an internal crawler that stays on CSUSB CSE hosts only.
 """
