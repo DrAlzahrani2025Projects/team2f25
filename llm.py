@@ -1,7 +1,6 @@
 # llm.py
 """
 Centralized LLM connection manager for the CSUSB Internship Finder.
-Provides cached connection creation and configuration management.
 """
 
 import os
