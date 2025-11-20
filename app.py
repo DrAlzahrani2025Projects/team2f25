@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import ui  # all UI helpers live here
 from scraper import scrape_csusb_listings, CSUSB_CSE_URL
 from query_to_filter import parse_query_to_filter, classify_intent
+from llm import get_default_llm, get_creative_llm, get_classification_llm, get_resume_extractor_llm, get_planner_llm
 from resume_parser import extract_resume_text, llm_resume_extract, save_resume, answer_from_resume
 from cover_letter.cl_state import init_cover_state, set_target_url
 from cover_letter.cl_flow import (
@@ -39,6 +40,23 @@ ui.inject_css("styles.css")
 ui.inject_badge_css()
 ui.header(APP_TITLE, CSUSB_CSE_URL)
 init_cover_state()
+
+
+
+# ===== STREAMLIT-SPECIFIC LLM CACHING =====
+
+default_llm = get_default_llm()
+
+creative_llm = get_creative_llm()
+
+classification_llm = get_classification_llm()
+
+resume_extractor_llm = get_resume_extractor_llm()
+
+planner_llm = get_planner_llm()
+
+planner_llm = get_planner_llm()
+
 
 def render_links_as_assistant_message(results):
     """Render a markdown chat message with links/title/company, and save it to chat history."""
@@ -119,7 +137,7 @@ with st.sidebar:
                     max_chars = 2000
                     if len(text) > max_chars:
                         text = text[:max_chars]
-                    parsed = llm_resume_extract(text) or {}
+                    parsed = llm_resume_extract(resume_extractor_llm, text) or {}
                     st.session_state["resume_text"] = text
                     st.session_state["resume_json"] = parsed
                     st.session_state["resume_data"] = parsed
@@ -269,24 +287,24 @@ if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|dra
         set_target_url(user_msg)
         # Begin the guided cover-letter information collection flow
     # (asks the user for details/resume bits if needed).
-    start_collection(render=ui.render_msg)
+    start_collection(planner_llm, render=ui.render_msg)
        # Stop further Streamlit processing in this run so we don't
     # fall through to other intent handlers or render duplicate UI.
     st.stop()
 
     # --- COVER LETTER PROFILE COLLECTION OVERRIDE ---
 if st.session_state.get("collecting_cover_profile", False):
-    cl_flow_handle_user_message(user_msg, ui.render_msg)
+    cl_flow_handle_user_message(planner_llm, user_msg, ui.render_msg)
     st.stop()
 
 
 def handle_user_message(message_text, render):
-    if llm_is_resume_question(message_text):
+    if llm_is_resume_question(resume_llm, message_text):
         resume_json = st.session_state.get("resume_json", {})
         reply = answer_from_resume(message_text, resume_json)
         render("assistant", reply or "No resume data available.")
         return True
-    consumed = cl_flow_handle_user_message(message_text, render)
+    consumed = cl_flow_handle_user_message(planner_llm, message_text, render)
     return consumed
 
 t = (user_msg or "").lower().strip()
@@ -301,17 +319,17 @@ if re.search(r"\b(cover\s*letter|make.*cover\s*letter|create.*cover\s*letter|dra
             url_col = "link" if "link" in matches.columns else ("url" if "url" in matches.columns else None)
             if url_col:
                 set_target_url(str(matches.iloc[0][url_col]))
-    start_collection(render=ui.render_msg)
+    start_collection(planner_llm, render=ui.render_msg)
     st.stop()
 
-raw_intent = classify_intent(user_msg)
+raw_intent = classify_intent(classification_llm, user_msg)
 intent = raw_intent.strip().lower()
 st.sidebar.caption(f"🎯 Intent (LLM): {intent}")
 
 if intent == "resume_question":
     data = st.session_state.get("resume_data") or {}
     if not data:
-        reply = "Please upload your résumé (PDF/DOCX/TXT) using the sidebar, then ask your question."
+        reply = "Please upload your résumé (PDF/DOCX/TXT) first using the sidebar."
         ui.render_msg("assistant", reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
     try:
